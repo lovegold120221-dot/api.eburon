@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user profile data and memories",
+      "type": "object",
+      "properties": {
+        "memories": {
+          "type": "array",
+          "description": "List of memories for the user"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "Note": {
+      "title": "User Note",
+      "description": "A personal note saved by the user",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "createdAt", "updatedAt"]
+    },
+    "WhatsAppMessage": {
+      "title": "WhatsApp Message",
+      "description": "Log of a sent or received WhatsApp message",
+      "type": "object",
+      "properties": {
+        "phone": { "type": "string" },
+        "text": { "type": "string" },
+        "direction": { "type": "string", "enum": ["sent", "received"] },
+        "status": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["phone", "text", "direction", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Individual user document containing private memories"
+    },
+    "/users/{userId}/notes/{noteId}": {
+      "schema": "Note",
+      "description": "Collection of personal notes for the user"
+    },
+    "/users/{userId}/whatsapp_messages/{messageId}": {
+      "schema": "WhatsAppMessage",
+      "description": "History of WhatsApp communications"
+    }
+  }
+}
