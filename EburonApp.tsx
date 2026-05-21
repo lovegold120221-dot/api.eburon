@@ -104,6 +104,7 @@ export default function EburonApp() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [authError, setAuthError] = useState('');
+  const [googleToken, setGoogleToken] = useState<string | null>(null);
   
   const { client, connect, disconnect, connected, volume, setConfig } = useLiveAPIContext();
   const turns = useLogStore((state) => state.turns);
@@ -231,11 +232,19 @@ export default function EburonApp() {
       async (user: any, token: string) => {
         setIsAuthOpen(false);
         setActiveOverlay(null);
+        if (token) {
+          setGoogleToken(token);
+        }
         try {
           const docRef = doc(db, 'users', user.uid);
           unsubscribeSnapshot = onSnapshot(docRef, (snapshot) => {
             if (snapshot.exists()) {
               const data = snapshot.data();
+              if (data.accessToken) {
+                setGoogleToken(data.accessToken);
+              } else {
+                setGoogleToken(null);
+              }
               if (data.memories) {
                 setMemories(data.memories);
               }
@@ -504,6 +513,18 @@ Output only natural spoken text. No stage directions, no brackets, no role label
       }
     } catch (err: any) {
       setAuthError(err.message);
+    }
+  };
+
+  const handleGoogleConnectInOverlay = async () => {
+    try {
+      const authResult = await googleSignIn();
+      if (authResult) {
+        setGoogleToken(authResult.accessToken);
+      }
+    } catch (err: any) {
+      console.error("Google Connect Overlay error:", err);
+      alert("Failed to authenticate Google account: " + err.message);
     }
   };
 
@@ -1439,6 +1460,80 @@ Output only natural spoken text. No stage directions, no brackets, no role label
             >
               <Plus size={16} /> Add Function Call Call
             </button>
+          </div>
+
+          {/* Google Workspace Connection & Permissions */}
+          <div className="form-group" style={{ marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '24px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <Plug size={16} style={{ color: '#cbfb45' }} />
+              Google Workspace Account
+            </label>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px', lineHeight: '1.4' }}>
+              Connect your Google Account to authorize all Workspace tools (Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts). This stores your token securely in Firestore for function calling.
+            </p>
+            
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              padding: '16px',
+              backgroundColor: 'rgba(255,255,255,0.02)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '16px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    backgroundColor: googleToken ? '#cbfb45' : '#ff4d4d',
+                    boxShadow: googleToken ? '0 0 10px #cbfb45' : '0 0 10px #ff4d4d'
+                  }}></div>
+                  <span style={{ fontSize: '14px', fontWeight: 500, color: googleToken ? 'var(--text-main)' : 'var(--text-muted)' }}>
+                    {googleToken ? 'Google Account Connected' : 'Google Account Disconnected'}
+                  </span>
+                </div>
+                {googleToken && (
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', backgroundColor: 'rgba(203, 251, 69, 0.1)', padding: '4px 8px', borderRadius: '8px', border: '1px solid rgba(203, 251, 69, 0.2)' }}>
+                    Active Token
+                  </span>
+                )}
+              </div>
+
+              {googleToken && (
+                <div style={{ fontSize: '12px', wordBreak: 'break-all', fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.4)', backgroundColor: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                  Token Signature: {googleToken.substring(0, 15)}...
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleGoogleConnectInOverlay}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '14px',
+                  backgroundColor: googleToken ? 'rgba(255,255,255,0.05)' : '#cbfb45',
+                  border: googleToken ? '1px solid var(--border-color)' : 'none',
+                  borderRadius: '12px',
+                  color: googleToken ? 'var(--text-main)' : '#000',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  marginTop: '4px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="icon" style={{ fontSize: '16px' }}>account_circle</span>
+                  {googleToken ? 'Reconnect / Grant Workspace Permissions' : 'Connect Google Workspace'}
+                </div>
+              </button>
+            </div>
           </div>
 
           <button className="save-now-btn" onClick={async (e) => {

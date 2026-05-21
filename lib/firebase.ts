@@ -38,6 +38,10 @@ export const db = initializeFirestore(app, {
 }, firestoreId === '' ? undefined : firestoreId); /* CRITICAL: The app will break without this line */
 
 const provider = new GoogleAuthProvider();
+provider.setCustomParameters({
+  prompt: 'consent',
+  access_type: 'offline'
+});
 // Required Scopes for Google Workspace APIs
 provider.addScope('https://www.googleapis.com/auth/tasks');
 provider.addScope('https://www.googleapis.com/auth/calendar');
@@ -56,7 +60,6 @@ provider.addScope('https://www.googleapis.com/auth/gmail.readonly');
 provider.addScope('https://www.googleapis.com/auth/chat.messages');
 provider.addScope('https://www.googleapis.com/auth/chat.spaces');
 provider.addScope('https://www.googleapis.com/auth/meetings.space.created');
-provider.addScope('https://www.googleapis.com/auth/keep');
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
