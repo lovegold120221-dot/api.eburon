@@ -237,6 +237,41 @@ export default function EburonApp() {
         }
         try {
           const docRef = doc(db, 'users', user.uid);
+          
+          // Guarantee Firestore document exists for active connection
+          try {
+            const userSnap = await getDoc(docRef);
+            if (!userSnap.exists()) {
+              console.log('Initializing user document in Firestore...');
+              await setDoc(docRef, {
+                email: user.email || '',
+                displayName: user.displayName || '',
+                photoURL: user.photoURL || '',
+                accessToken: token || null,
+                memories: [],
+                settings: {
+                  personaName: 'Beatrice',
+                  userCallName: user.displayName || 'Friend',
+                  systemPrompt: "Friendly, patient, and solutions-oriented...",
+                  voice: 'Puck',
+                  language: 'en-US',
+                  tools: useTools.getState().tools || []
+                },
+                updatedAt: new Date().toISOString()
+              }, { merge: true });
+            } else {
+              // Ensure we don't wipe existing settings but do update token if we have a fresh one
+              if (token) {
+                await setDoc(docRef, {
+                  accessToken: token,
+                  updatedAt: new Date().toISOString()
+                }, { merge: true });
+              }
+            }
+          } catch (initErr) {
+            console.warn('Failed to auto-initialize user document:', initErr);
+          }
+
           unsubscribeSnapshot = onSnapshot(docRef, (snapshot) => {
             if (snapshot.exists()) {
               const data = snapshot.data();
