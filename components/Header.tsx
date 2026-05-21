@@ -5,7 +5,7 @@
 import { useUI } from '@/lib/state';
 
 export default function Header() {
-  const { toggleSidebar } = useUI();
+  const { setActiveOverlay } = useUI();
 
   return (
     <header>
@@ -17,7 +17,7 @@ export default function Header() {
       <div className="header-right">
         <button
           className="settings-button"
-          onClick={toggleSidebar}
+          onClick={() => setActiveOverlay('settings')}
           aria-label="Settings"
         >
           <span className="icon">tune</span>

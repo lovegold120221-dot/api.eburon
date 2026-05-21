@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
-import { initializeFirestore, doc, getDocFromServer, getDoc, setDoc } from 'firebase/firestore';
+import { initializeFirestore, doc, getDocFromServer, getDoc, setDoc, getDocFromCache } from 'firebase/firestore';
 import firebaseConfigFromFile from '../firebase-applet-config.json';
 
 const getEnv = (key: string): string | undefined => {
@@ -41,7 +41,7 @@ const provider = new GoogleAuthProvider();
 // Required Scopes for Google Workspace APIs
 provider.addScope('https://www.googleapis.com/auth/tasks');
 provider.addScope('https://www.googleapis.com/auth/calendar');
-provider.addScope('https://www.googleapis.com/auth/drive.file');
+provider.addScope('https://www.googleapis.com/auth/drive');
 provider.addScope('https://www.googleapis.com/auth/documents');
 provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 provider.addScope('https://www.googleapis.com/auth/presentations');
@@ -49,10 +49,14 @@ provider.addScope('https://www.googleapis.com/auth/forms.body');
 provider.addScope('https://www.googleapis.com/auth/forms.responses.readonly');
 provider.addScope('https://www.googleapis.com/auth/contacts');
 provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
+provider.addScope('https://www.googleapis.com/auth/userinfo.email');
 provider.addScope('https://www.googleapis.com/auth/gmail.send');
+provider.addScope('https://www.googleapis.com/auth/gmail.modify');
+provider.addScope('https://www.googleapis.com/auth/gmail.readonly');
 provider.addScope('https://www.googleapis.com/auth/chat.messages');
 provider.addScope('https://www.googleapis.com/auth/chat.spaces');
 provider.addScope('https://www.googleapis.com/auth/meetings.space.created');
+provider.addScope('https://www.googleapis.com/auth/keep');
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
@@ -82,6 +86,12 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
 
     cachedAccessToken = credential.accessToken;
+    
+    try {
+      localStorage.setItem(`eburon_at_${result.user.uid}`, cachedAccessToken);
+    } catch (localStoreErr) {
+      console.warn('Failed to cache token to localStorage:', localStoreErr);
+    }
 
     // Securely persist Google OAuth user info & credentials in the user's Firestore document
     try {
@@ -111,13 +121,44 @@ export const getAccessToken = async (): Promise<string | null> => {
   }
   const currentUser = auth.currentUser;
   if (currentUser) {
+    // 1. Instantly check localStorage for offline survival and speed
+    try {
+      const localToken = localStorage.getItem(`eburon_at_${currentUser.uid}`);
+      if (localToken) {
+        cachedAccessToken = localToken;
+        return localToken;
+      }
+    } catch (localStoreErr) {
+      console.warn('Could not read token from localStorage cache:', localStoreErr);
+    }
+
+    // 2. Fetch from Firestore (falling back to cache upon offline exception)
     try {
       const userDocRef = doc(db, 'users', currentUser.uid);
-      const userSnap = await getDoc(userDocRef);
-      if (userSnap.exists()) {
+      let userSnap;
+      try {
+        userSnap = await getDoc(userDocRef);
+      } catch (err: any) {
+        const isOffline = err?.message?.toLowerCase().includes('offline') || err?.code === 'unavailable';
+        if (isOffline) {
+          console.warn('Firestore is offline, attempting to resolve token from local cache...');
+          try {
+            userSnap = await getDocFromCache(userDocRef);
+          } catch (cacheErr) {
+            console.warn('Failed to retrieve token from Firestore client cache:', cacheErr);
+          }
+        } else {
+          throw err;
+        }
+      }
+
+      if (userSnap && userSnap.exists()) {
         const data = userSnap.data();
         if (data && data.accessToken) {
           cachedAccessToken = data.accessToken;
+          try {
+            localStorage.setItem(`eburon_at_${currentUser.uid}`, data.accessToken);
+          } catch (_) {}
           return data.accessToken;
         }
       }
@@ -129,6 +170,12 @@ export const getAccessToken = async (): Promise<string | null> => {
 };
 
 export const logout = async () => {
+  const currentUser = auth.currentUser;
+  if (currentUser) {
+    try {
+      localStorage.removeItem(`eburon_at_${currentUser.uid}`);
+    } catch (_) {}
+  }
   await auth.signOut();
   cachedAccessToken = null;
 };

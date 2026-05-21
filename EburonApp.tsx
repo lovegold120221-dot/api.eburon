@@ -17,10 +17,11 @@ import {
   Building2, Video, MessageSquare, Settings, Wrench, History, 
   Trash2, QrCode, MapPin, Brain, Presentation, Mail, Table, 
   FileStack, Paperclip, Send, Mic, Cast, X, Check, Save, RotateCcw,
-  Plug, Lock, Pencil, Maximize2
+  Plug, Lock, Pencil, Maximize2, Plus, Cpu, CheckSquare, Square
 } from 'lucide-react';
 import { ArtifactOverlay } from './components/ArtifactOverlay';
 import Sidebar from './components/Sidebar';
+import ToolEditorModal from './components/ToolEditorModal';
 
 function StreamingText({ text, isFinal }: { text: string; isFinal: boolean }) {
   const [displayedText, setDisplayedText] = useState(isFinal ? text : "");
@@ -92,6 +93,13 @@ export default function EburonApp() {
   const activeOverlay = useUI((state) => state.activeOverlay);
   const setActiveOverlay = useUI((state) => state.setActiveOverlay);
   const toggleSidebar = useUI((state) => state.toggleSidebar);
+
+  const [editingTool, setEditingTool] = useState<any | null>(null);
+  const toggleTool = useTools((state) => state.toggleTool);
+  const addTool = useTools((state) => state.addTool);
+  const removeTool = useTools((state) => state.removeTool);
+  const updateTool = useTools((state) => state.updateTool);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -239,6 +247,7 @@ export default function EburonApp() {
                 if (s.systemPrompt) setSettings.setSystemPrompt(s.systemPrompt);
                 if (s.voice) setSettings.setVoice(s.voice);
                 if (s.language) setSettings.setLanguage(s.language);
+                if (s.tools) useTools.setState({ tools: s.tools });
               }
             }
           }, (err) => {
@@ -545,7 +554,7 @@ Output only natural spoken text. No stage directions, no brackets, no role label
 
   const handleToolAction = (toolId: string) => {
     if (toolId === 'settings') {
-      toggleSidebar();
+      setActiveOverlay('settings');
       return;
     }
     if (['history', 'tools', 'profile', 'whatsapp', 'scanner', 'location', 'map', 'picker'].includes(toolId)) {
@@ -635,7 +644,8 @@ Output only natural spoken text. No stage directions, no brackets, no role label
           userCallName,
           systemPrompt,
           voice,
-          language
+          language,
+          tools: useTools.getState().tools
         }
       }, { merge: true });
     } catch (e) {
@@ -1275,6 +1285,7 @@ Output only natural spoken text. No stage directions, no brackets, no role label
             <label>Presets</label>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
               <button 
+                type="button"
                 className="pill-btn" 
                 onClick={() => setTemplate('personal-assistant')}
                 style={{ padding: '6px 12px', borderRadius: '16px', border: '1px solid var(--border-color)', fontSize: '12px', background: 'transparent', cursor: 'pointer' }}
@@ -1282,6 +1293,7 @@ Output only natural spoken text. No stage directions, no brackets, no role label
                 Personal Assistant
               </button>
               <button 
+                type="button"
                 className="pill-btn" 
                 onClick={() => setTemplate('customer-support')}
                 style={{ padding: '6px 12px', borderRadius: '16px', border: '1px solid var(--border-color)', fontSize: '12px', background: 'transparent', cursor: 'pointer' }}
@@ -1289,6 +1301,7 @@ Output only natural spoken text. No stage directions, no brackets, no role label
                 Customer Support
               </button>
               <button 
+                type="button"
                 className="pill-btn" 
                 onClick={() => setTemplate('navigation-system')}
                 style={{ padding: '6px 12px', borderRadius: '16px', border: '1px solid var(--border-color)', fontSize: '12px', background: 'transparent', cursor: 'pointer' }}
@@ -1316,6 +1329,118 @@ Output only natural spoken text. No stage directions, no brackets, no role label
                 ))}
              </select>
           </div>
+
+          <div className="form-group" style={{ marginTop: '24px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Cpu size={14} className="text-[#cbfb45]" />
+              Dynamic Tools Map
+            </label>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px', lineHeight: '1.4' }}>
+              Enable, configure, or add custom integration tools that Beatrice can call during conversation.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '280px', overflowY: 'auto', paddingRight: '4px' }}>
+              {tools.map(tool => (
+                <div 
+                  key={tool.name} 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between', 
+                    padding: '14px 16px', 
+                    backgroundColor: 'rgba(255,255,255,0.03)', 
+                    border: '1px solid var(--border-color)', 
+                    borderRadius: '16px' 
+                  }}
+                >
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', flex: 1, minWidth: 0 }}>
+                    <input
+                      type="checkbox"
+                      id={`tool-checkbox-${tool.name}`}
+                      checked={tool.isEnabled}
+                      onChange={() => toggleTool(tool.name)}
+                      disabled={connected}
+                      style={{ display: 'none' }}
+                    />
+                    <span style={{ color: tool.isEnabled ? '#cbfb45' : 'var(--text-muted)', display: 'flex', alignItems: 'center', shrink: 0 }}>
+                      {tool.isEnabled ? <CheckSquare size={18} /> : <Square size={18} />}
+                    </span>
+                    <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {tool.name}
+                    </span>
+                  </label>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setEditingTool(tool)}
+                      disabled={connected}
+                      style={{ 
+                        padding: '8px', 
+                        borderRadius: '10px', 
+                        backgroundColor: 'rgba(255,255,255,0.05)', 
+                        border: 'none', 
+                        color: 'var(--text-muted)', 
+                        cursor: 'pointer', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        transition: 'all 0.2s'
+                      }}
+                      title="Edit schema parameter"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeTool(tool.name)}
+                      disabled={connected}
+                      style={{ 
+                        padding: '8px', 
+                        borderRadius: '10px', 
+                        backgroundColor: 'rgba(255,77,77,0.1)', 
+                        border: 'none', 
+                        color: '#ff4d4d', 
+                        cursor: 'pointer', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        transition: 'all 0.2s'
+                      }}
+                      title="Remove tool"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={addTool}
+              disabled={connected}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '14px',
+                backgroundColor: 'transparent',
+                border: '1.5px dashed var(--border-color)',
+                borderRadius: '16px',
+                color: 'var(--text-main)',
+                fontSize: '14px',
+                fontWeight: 600,
+                marginTop: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              <Plus size={16} /> Add Function Call Call
+            </button>
+          </div>
+
           <button className="save-now-btn" onClick={async (e) => {
              const btn = e.currentTarget;
              btn.textContent = 'Saving...';
@@ -1823,8 +1948,17 @@ Output only natural spoken text. No stage directions, no brackets, no role label
         </div>
       </div>
 
-      {/* Settings Setup Sidebar */}
-      <Sidebar />
+      {/* Tool schema editor modal */}
+      {editingTool && (
+        <ToolEditorModal
+          tool={editingTool}
+          onClose={() => setEditingTool(null)}
+          onSave={(updatedTool) => {
+            updateTool(editingTool.name, updatedTool);
+            setEditingTool(null);
+          }}
+        />
+      )}
     </div>
   );
 }
