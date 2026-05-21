@@ -713,11 +713,17 @@ Output only natural spoken text. No stage directions, no brackets, no role label
 
   return (
     <div id="app" className="app-container">
-      {/* Header */}
+      {/* Header with macOS-style window chrome decoration */}
       <header className="header">
-        <div className="header-left">
-          <img src="https://eburon.ai/icon-eburon.svg" alt="Eburon Logo" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
-          <span className="ai-name">Eburon AI</span>
+        <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="window-decorations" style={{ display: 'flex', gap: '6px', marginRight: '6px' }}>
+            <div className="decor-dot" style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#ff5f56', opacity: 0.85 }}></div>
+            <div className="decor-dot" style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#ffbd2e', opacity: 0.85 }}></div>
+            <div className="decor-dot" style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#27c93f', opacity: 0.85 }}></div>
+          </div>
+          <div style={{ width: '1px', height: '12px', backgroundColor: '#333333', marginRight: '4px' }}></div>
+          <img src="https://eburon.ai/icon-eburon.svg" alt="Eburon Logo" style={{ width: '22px', height: '22px', objectFit: 'contain' }} />
+          <span className="ai-name font-mono tracking-tight" style={{ fontSize: '12px', color: '#888888', letterSpacing: '0.5px' }}>EBURON_Companion</span>
         </div>
 
         {connected && (
