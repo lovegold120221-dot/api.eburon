@@ -184,14 +184,21 @@ export default function EburonApp() {
     picker.setVisible(true);
   };
 
-  const { stream, videoRef, isWebcamActive, isScreenShareActive, startWebcam, startScreenShare, stopStream } = useVideoStream();
+  const { stream, videoRef, isWebcamActive, isScreenShareActive, error: videoError, startWebcam, startScreenShare, stopStream } = useVideoStream();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isWebcamActive || isScreenShareActive) {
       setIsMeetOpen(true);
+      if (connected && client) {
+        if (isWebcamActive) {
+          client.send({ text: "[SYSTEM: User has started sharing their webcam. Beatrice can now describe and see the live visual feed in real-time. Please acknowledge this naturally and greet the user based on what you see.]" });
+        } else if (isScreenShareActive) {
+          client.send({ text: "[SYSTEM: User has _started screen sharing_ their display in real-time. Beatrice can now analyze whatever visual content the user chooses to show her, including websites, screens, uploaded images, screenshots, charts, diagrams, or documents as images. Beatrice can read and explain all visual content in detail. Acknowledge this naturally and ask of any specific content they want to discuss.]" });
+        }
+      }
     }
-  }, [isWebcamActive, isScreenShareActive]);
+  }, [isWebcamActive, isScreenShareActive, connected, client]);
 
   useEffect(() => {
     const onVolume = (vol: number) => {
@@ -836,6 +843,46 @@ Output only natural spoken text. No stage directions, no brackets, no role label
               }} 
             />
 
+            {videoError && (
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                maxWidth: '85%',
+                backgroundColor: 'rgba(220, 38, 38, 0.95)',
+                color: '#fff',
+                padding: '20px',
+                borderRadius: '16px',
+                textAlign: 'center',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                zIndex: 2005
+              }}>
+                <div style={{ fontWeight: 700, fontSize: '15px' }}>⚠️ Visual Share Unvailable</div>
+                <div style={{ fontSize: '13px', opacity: 0.9, lineHeight: 1.4 }}>{videoError}</div>
+                <button
+                  onClick={() => stopStream()}
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '10px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    marginTop: '6px',
+                    alignSelf: 'center'
+                  }}>
+                  Dismiss Error
+                </button>
+              </div>
+            )}
+
             {/* Top Bar Floating Over Video */}
             <div style={{ position: 'absolute', top: '16px', left: '16px', right: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 2002 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'rgba(10, 10, 10, 0.75)', padding: '6px 12px', borderRadius: '20px', backdropFilter: 'blur(10px)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
@@ -980,6 +1027,18 @@ Output only natural spoken text. No stage directions, no brackets, no role label
                   <Send size={15} />
                 </button>
               </div>
+            </div>
+
+            {/* Secure Context & Privacy Status */}
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', opacity: 0.6, fontSize: '11px', color: '#888', marginTop: '-4px', marginBottom: '-4px' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10b981' }} />
+                Secure Context
+              </span>
+              <span>•</span>
+              <span>Explicit Permission Only</span>
+              <span>•</span>
+              <span>No Background Capture</span>
             </div>
 
             {/* Mobile-Style Call Action Buttons */}
