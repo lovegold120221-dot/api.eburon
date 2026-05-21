@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Download, Share, Lock, ExternalLink, Edit3, Cloud, FileText } from 'lucide-react';
+import { X, Download, Share, Lock, ExternalLink, Edit3, Cloud, FileText, Calendar, Mail, Folder, Users, CheckSquare, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useUI } from '../lib/state';
 
@@ -167,6 +167,253 @@ const DownloadDocButton = ({ content, title, type }: { content: string, title: s
      return <ActionButton icon={FileText} label="Download DOCX" onClick={handleDownload} isDocx />;
   }
   return null;
+};
+
+const WorkspaceDataViewer: React.FC<{ data: any }> = ({ data }) => {
+  if (!data) return null;
+
+  // 1. Google Calendar check
+  const isCalendar = data.kind === "calendar#events" || (Array.isArray(data.items) && data.items.some((item: any) => item.start && item.end));
+  
+  // 2. Google Drive check
+  const isDrive = data.kind === "drive#fileList" || Array.isArray(data.files);
+
+  // 3. Gmail Messages check
+  const isGmail = data.messages || data.threads || (data.id && (data.threadId || data.labelIds));
+
+  // 4. Contacts check
+  const isContacts = Array.isArray(data.connections);
+
+  // 5. Tasks check
+  const isTasks = data.kind === "tasks#tasks" || (Array.isArray(data.items) && data.items.some((item: any) => item.due !== undefined || (item.kind && item.kind.includes('task'))));
+
+  if (isCalendar) {
+    const events = data.items || [];
+    return (
+      <div className="w-full text-white bg-[#0e1117] rounded-2xl border border-white/10 p-4 shrink-0 flex flex-col gap-4 font-sans text-xs">
+        <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+          <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+            <Calendar size={18} />
+          </div>
+          <div>
+            <h4 className="font-bold text-[14px]">Google Calendar Events</h4>
+            <p className="text-[10px] text-gray-400">Active reminders and meeting schedules</p>
+          </div>
+        </div>
+        {events.length === 0 ? (
+          <p className="text-gray-400 text-center py-4 font-mono">No upcoming events scheduled.</p>
+        ) : (
+          <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
+            {events.map((evt: any, i: number) => {
+              const start = evt.start?.dateTime || evt.start?.date || '';
+              const end = evt.end?.dateTime || evt.end?.date || '';
+              const formattedDate = start ? new Date(start).toLocaleDateString() : 'All day';
+              const formattedTime = start && evt.start?.dateTime ? `${new Date(start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${new Date(end).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'All Day';
+              return (
+                <div key={evt.id || i} className="p-3 bg-white/5 rounded-xl border border-white/5 hover:border-white/15 transition-all flex flex-col gap-1.5">
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="font-bold text-white text-[12px]">{evt.summary || 'Untitled Event'}</span>
+                    <span className="text-[10px] font-semibold text-blue-400 shrink-0 bg-blue-500/10 px-2 py-0.5 rounded-full">{formattedDate}</span>
+                  </div>
+                  {evt.location && <div className="text-[11px] text-gray-300">📍 {evt.location}</div>}
+                  <div className="text-[10px] text-gray-400 font-mono">⏰ {formattedTime}</div>
+                  {evt.hangoutLink && (
+                    <a href={evt.hangoutLink} target="_blank" rel="noopener noreferrer" className="mt-1 self-start flex items-center gap-1 px-2.5 py-1 bg-emerald-500/20 text-emerald-300 rounded-lg hover:bg-emerald-500/30 font-medium text-[10px] transition-all">
+                      <Sparkles size={11} /> Join Google Meet
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isDrive) {
+    const files = data.files || [];
+    return (
+      <div className="w-full text-white bg-[#0e1117] rounded-2xl border border-white/10 p-4 shrink-0 flex flex-col gap-4 font-sans text-xs">
+        <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+          <div className="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center text-yellow-400 shrink-0">
+            <Folder size={18} />
+          </div>
+          <div>
+            <h4 className="font-bold text-[14px]">Google Drive Files</h4>
+            <p className="text-[10px] text-gray-400">Stored documents, forms, slides, and files</p>
+          </div>
+        </div>
+        {files.length === 0 ? (
+          <p className="text-gray-400 text-center py-4 font-mono">No files found.</p>
+        ) : (
+          <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
+            {files.map((file: any, i: number) => (
+              <div key={file.id || i} className="p-3 bg-white/5 rounded-xl border border-white/5 hover:border-white/15 transition-all flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  <div className="p-1.5 rounded bg-white/10 shrink-0 text-white">
+                    <FileText size={16} />
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-bold text-white truncate text-[11px]">{file.name}</span>
+                    <span className="text-[9px] text-[#888] font-mono truncate">{file.mimeType?.split('.').pop() || 'File'}</span>
+                  </div>
+                </div>
+                {file.webViewLink && (
+                  <a href={file.webViewLink} target="_blank" rel="noopener noreferrer" className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-all shrink-0">
+                    <ExternalLink size={14} />
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isGmail) {
+    const messages = data.messages || [];
+    const isSingleMessage = data.id && (data.snippet || data.body);
+
+    if (isSingleMessage) {
+      const subject = data.payload?.headers?.find((h: any) => h.name === 'Subject')?.value || 'No Subject';
+      const from = data.payload?.headers?.find((h: any) => h.name === 'From')?.value || 'Unknown Sender';
+      const date = data.payload?.headers?.find((h: any) => h.name === 'Date')?.value || '';
+      return (
+        <div className="w-full text-white bg-[#0e1117] rounded-2xl border border-white/10 p-4 shrink-0 flex flex-col gap-4 font-sans text-xs">
+          <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+            <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center text-red-400 shrink-0">
+              <Mail size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h4 className="font-bold text-[13px] truncate">{subject}</h4>
+              <p className="text-[10px] text-gray-400 truncate">From: {from}</p>
+            </div>
+          </div>
+          <div className="text-[11px] leading-relaxed text-gray-300 whitespace-pre-wrap max-h-[180px] overflow-y-auto pr-1">
+            {data.snippet || data.body || 'No message content.'}
+          </div>
+          {date && <div className="text-[9px] text-gray-500 font-mono">Received: {date}</div>}
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full text-white bg-[#0e1117] rounded-2xl border border-white/10 p-4 shrink-0 flex flex-col gap-4 font-sans text-xs">
+        <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+          <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center text-red-400 shrink-0">
+            <Mail size={18} />
+          </div>
+          <div>
+            <h4 className="font-bold text-[14px]">Gmail Messages</h4>
+            <p className="text-[10px] text-gray-400">Conversations from your Inbox</p>
+          </div>
+        </div>
+        {messages.length === 0 ? (
+          <p className="text-gray-400 text-center py-4 font-mono">No recent emails found.</p>
+        ) : (
+          <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
+            {messages.map((msg: any, i: number) => (
+              <div key={msg.id || i} className="p-3 bg-white/5 rounded-xl border border-white/5 hover:border-white/15 transition-all flex flex-col gap-1">
+                <span className="font-mono text-[9px] text-red-400 uppercase font-semibold">Message ID: {msg.id}</span>
+                <p className="text-gray-300 text-[11px] line-clamp-2 leading-normal">{msg.snippet || 'Click email thread to open details.'}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isContacts) {
+    const connections = data.connections || [];
+    return (
+      <div className="w-full text-white bg-[#0e1117] rounded-2xl border border-white/10 p-4 shrink-0 flex flex-col gap-4 font-sans text-xs">
+        <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+            <Users size={18} />
+          </div>
+          <div>
+            <h4 className="font-bold text-[14px]">Google Contacts</h4>
+            <p className="text-[10px] text-gray-400">People API Connections</p>
+          </div>
+        </div>
+        {connections.length === 0 ? (
+          <p className="text-gray-400 text-center py-4 font-mono">No contacts found.</p>
+        ) : (
+          <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
+            {connections.map((conn: any, i: number) => {
+              const name = conn.names?.[0]?.displayName || 'Unnamed Contact';
+              const email = conn.emailAddresses?.[0]?.value || '';
+              const phone = conn.phoneNumbers?.[0]?.value || '';
+              return (
+                <div key={conn.resourceName || i} className="p-3 bg-white/5 rounded-xl border border-white/5 hover:border-white/15 transition-all flex flex-col gap-1">
+                  <span className="font-bold text-white text-[12px]">{name}</span>
+                  {email && <span className="text-[10px] text-gray-300">✉️ {email}</span>}
+                  {phone && <span className="text-[10px] text-gray-400">📞 {phone}</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isTasks) {
+    const tasks = data.items || [];
+    return (
+      <div className="w-full text-white bg-[#0e1117] rounded-2xl border border-white/10 p-4 shrink-0 flex flex-col gap-4 font-sans text-xs">
+        <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+          <div className="w-8 h-8 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-400 shrink-0">
+            <CheckSquare size={18} />
+          </div>
+          <div>
+            <h4 className="font-bold text-[14px]">Google Tasks</h4>
+            <p className="text-[10px] text-gray-400">Active reminders and to-do lists</p>
+          </div>
+        </div>
+        {tasks.length === 0 ? (
+          <p className="text-gray-400 text-center py-4 font-mono">No outstanding tasks.</p>
+        ) : (
+          <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
+            {tasks.map((task: any, i: number) => (
+              <div key={task.id || i} className="p-3 bg-white/5 rounded-xl border border-white/5 hover:border-white/15 transition-all flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-1 min-w-0">
+                  <span className="font-bold text-white text-[12px] truncate">{task.title || 'Untitled Task'}</span>
+                  {task.notes && <p className="text-[10px] text-gray-400 truncate">{task.notes}</p>}
+                </div>
+                {task.due && (
+                  <span className="text-[9px] font-mono text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded-full shrink-0">
+                    {new Date(task.due).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Fallback / generic data (e.g. form created, slides created, standard confirmation payload)
+  return (
+    <div className="w-full text-white bg-[#0e1117] rounded-2xl border border-white/10 p-4 shrink-0 flex flex-col gap-4 font-sans text-xs">
+      <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+        <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+          <Sparkles size={18} />
+        </div>
+        <div>
+          <h4 className="font-bold text-[14px]">Workspace Request Successful</h4>
+          <p className="text-[10px] text-gray-400">Workspace data payload and response</p>
+        </div>
+      </div>
+      <div className="p-3 bg-white/5 border border-white/5 rounded-xl overflow-y-auto max-h-[200px]">
+        {highlightJson(JSON.stringify(data, null, 2))}
+      </div>
+    </div>
+  );
 };
 
 export const ArtifactOverlay: React.FC = () => {
@@ -374,6 +621,10 @@ export const ArtifactOverlay: React.FC = () => {
                 </div>
               </div>
 
+            </div>
+          ) : activeWorkspaceResult ? (
+            <div className="w-full flex justify-center items-center h-full overflow-hidden p-2">
+              <WorkspaceDataViewer data={activeWorkspaceResult} />
             </div>
           ) : null}
         </div>
