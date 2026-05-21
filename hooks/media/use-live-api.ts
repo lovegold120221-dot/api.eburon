@@ -680,6 +680,16 @@ export function useLiveApi({
            responsePayload = { status: `Opened ${url} in a new tab` };
         }
 
+        if (fc.name === 'youtube_search') {
+           const { query } = fc.args as any;
+           try {
+              const res = await fetch(`/api/youtube?q=${encodeURIComponent(query)}`);
+              responsePayload = await res.json();
+           } catch (e: any) {
+              responsePayload = { error: e.message };
+           }
+        }
+
          if (fc.name === 'open_eburon_asset_studio') {
              responsePayload = { status: `Eburon Asset + Document Studio opened successfully` };
              const uiState = await import('../../lib/state');

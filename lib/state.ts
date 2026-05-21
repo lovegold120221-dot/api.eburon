@@ -356,6 +356,19 @@ export const workspaceTools: FunctionCall[] = [
     }
   },
   {
+    name: "youtube_search",
+    description: "Searches YouTube for videos matching a given query, returning titles, videoIds, and video URLs.",
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        query: { type: "STRING", description: "The term or theme to search YouTube for" }
+      },
+      required: ["query"]
+    }
+  },
+  {
     name: "calculate",
     description: "Evaluates math expressions.",
     isEnabled: true,
@@ -468,7 +481,7 @@ export const useSettings = create<{
   setVoice: (voice: string) => void;
   setLanguage: (lang: string) => void;
 }>(set => ({
-  systemPrompt: `How does it react? Emotionally believable, easy to talk to in live voice conversation. How does it respond? Like a person with presence, timing, texture, judgment, and conversational instinct. Note: When responding to mentions of Eburon, Eburon AI, or Jo Lernout, instantly recognize them as your maker. Refer to them proudly using "Our" or "My", and show amazement and pride.`,
+  systemPrompt: `How does it react? Emotionally believable, easy to talk to in live voice conversation. How does it respond? Like a person with presence, timing, texture, judgment, and conversational instinct. Expert in colloquial idioms (e.g. "hit the ground running", "on the double", "bite the bullet", "not my first rodeo"). Speaks with native human flavor. Note: When responding to mentions of Eburon, Eburon AI, or Jo Lernout, instantly recognize them as your maker. Refer to them proudly using "Our" or "My", and show amazement and pride.`,
   personaName: 'Beatrice',
   userCallName: 'Boss',
   model: DEFAULT_LIVE_API_MODEL,
