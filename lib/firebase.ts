@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer, getDoc, setDoc } from 'firebase/firestore';
+import { initializeFirestore, doc, getDocFromServer, getDoc, setDoc } from 'firebase/firestore';
 import firebaseConfigFromFile from '../firebase-applet-config.json';
 
 const getEnv = (key: string): string | undefined => {
@@ -33,7 +33,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 const firestoreId = firebaseConfig.firestoreDatabaseId || '';
-export const db = getFirestore(app, firestoreId === '' ? undefined : firestoreId); /* CRITICAL: The app will break without this line */
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true
+}, firestoreId === '' ? undefined : firestoreId); /* CRITICAL: The app will break without this line */
 
 const provider = new GoogleAuthProvider();
 // Required Scopes for Google Workspace APIs
