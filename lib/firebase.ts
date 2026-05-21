@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, linkWithPopup } from 'firebase/auth';
 import { initializeFirestore, doc, getDocFromServer, getDoc, setDoc, getDocFromCache } from 'firebase/firestore';
 import firebaseConfigFromFile from '../firebase-applet-config.json';
 
@@ -82,7 +82,29 @@ export const initAuth = (
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
   try {
     isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
+    let result;
+    const currentUser = auth.currentUser;
+    
+    if (currentUser) {
+      try {
+        console.log('Attempting to link existing user account with Google Provider...');
+        result = await linkWithPopup(currentUser, provider);
+      } catch (linkErr: any) {
+        if (linkErr.code === 'auth/credential-already-in-use') {
+          console.warn('Google account already linked to another user. Signing into that account instead...');
+          result = await signInWithPopup(auth, provider);
+        } else if (linkErr.code === 'auth/provider-already-linked') {
+          console.log('Google account already linked to this user. Re-authenticating to get fresh token...');
+          result = await signInWithPopup(auth, provider);
+        } else {
+          console.warn('Linking failed, falling back to standard sign in:', linkErr);
+          result = await signInWithPopup(auth, provider);
+        }
+      }
+    } else {
+      result = await signInWithPopup(auth, provider);
+    }
+
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
       throw new Error('Failed to get access token from Firebase Auth');
