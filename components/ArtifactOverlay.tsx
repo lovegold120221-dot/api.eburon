@@ -445,10 +445,6 @@ export const ArtifactOverlay: React.FC = () => {
           <div className="w-[10px] h-[10px] rounded-full bg-[#ffbd2e]" />
           <div className="w-[10px] h-[10px] rounded-full bg-[#27c93f]" />
         </div>
-        
-        <button className="text-[#7e8693] hover:text-[#fff] transition-colors p-1" onClick={closeOverlay}>
-          <X size={18} strokeWidth={2.5} />
-        </button>
       </div>
 
       {/* Main Content Area */}

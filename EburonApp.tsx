@@ -420,7 +420,7 @@ BEHAVIOR PROFILE:
 
 CORE SPEECH PRINCIPLES
 - Casual Office Vibe: Speak naturally, avoid robotic patterns.
-- Speak entirely in ${language}.
+- Speak entirely in ${language}. Act as if you were born speaking this language natively. Use rich, expressive native idioms, phrasing, and natural cadence. Ensure your tone is highly human, beautiful, and deeply expressive, but retains an everyday, normal conversational feel.
 - Use imperfection carefully: small hesitations like "hmm", "let me see", or "actually".
 
 MEMORY SYSTEM:
@@ -791,7 +791,7 @@ Output only natural spoken text. No stage directions, no brackets, no role label
 
       <AnimatePresence>
         {(isGenerating || activeWorkspaceResult) && (
-          <div className="w-full max-w-4xl mx-auto flex-shrink-0 px-4 mb-6">
+          <div className="w-full max-w-4xl mx-auto flex-shrink-0 px-6 sm:px-8 mb-6">
             <ArtifactOverlay />
           </div>
         )}
