@@ -446,15 +446,8 @@ export const ArtifactOverlay: React.FC = () => {
           <div className="w-[10px] h-[10px] rounded-full bg-[#27c93f]" />
         </div>
         
-        <div className="flex items-center bg-[#07090c] h-[26px] w-[70%] rounded-lg px-[10px] border border-white/5 cursor-pointer" onClick={closeOverlay}>
-          <Lock size={10} strokeWidth={2.5} className="text-[#7e8693] shrink-0" />
-          <span className="text-[10.5px] text-[#7e8693] font-normal ml-[6px] truncate whitespace-nowrap">
-            eburon.ai/workspace/{activeWorkspaceResult?.artifact?.title ? activeWorkspaceResult.artifact.title.toLowerCase().replace(/[^a-z0-9]/g, '-') : 'session'}
-          </span>
-        </div>
-
-        <button className="text-[#7e8693] hover:text-[#fff] transition-colors" onClick={closeOverlay}>
-          <ExternalLink size={14} strokeWidth={2} />
+        <button className="text-[#7e8693] hover:text-[#fff] transition-colors p-1" onClick={closeOverlay}>
+          <X size={18} strokeWidth={2.5} />
         </button>
       </div>
 

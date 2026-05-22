@@ -791,7 +791,7 @@ Output only natural spoken text. No stage directions, no brackets, no role label
 
       <AnimatePresence>
         {(isGenerating || activeWorkspaceResult) && (
-          <div className="w-full max-w-4xl mx-auto flex-shrink-0 px-2 lg:px-0">
+          <div className="w-full max-w-4xl mx-auto flex-shrink-0 px-4 mb-6">
             <ArtifactOverlay />
           </div>
         )}
