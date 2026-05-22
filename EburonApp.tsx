@@ -716,32 +716,28 @@ Output only natural spoken text. No stage directions, no brackets, no role label
       {/* Header with macOS-style window chrome decoration */}
       <header className="header">
         <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div className="window-decorations" style={{ display: 'flex', gap: '6px', marginRight: '6px' }}>
-            <div className="decor-dot" style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#ff5f56', opacity: 0.85 }}></div>
-            <div className="decor-dot" style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#ffbd2e', opacity: 0.85 }}></div>
-            <div className="decor-dot" style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#27c93f', opacity: 0.85 }}></div>
-          </div>
-          <div style={{ width: '1px', height: '12px', backgroundColor: '#333333', marginRight: '4px' }}></div>
-          <img src="https://eburon.ai/icon-eburon.svg" alt="Eburon Logo" style={{ width: '22px', height: '22px', objectFit: 'contain' }} />
-          <span className="ai-name font-mono tracking-tight" style={{ fontSize: '12px', color: '#888888', letterSpacing: '0.5px' }}>EBURON_Companion</span>
+          <img src="https://eburon.ai/icon-eburon.svg" alt="Eburon Logo" style={{ width: '26px', height: '26px', objectFit: 'contain' }} />
+          <span className="ai-name" style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', letterSpacing: '-0.3px' }}>Eburon AI</span>
         </div>
 
         {connected && (
-          <div className="speaker-visualizer">
-            {[...Array(6)].map((_, i) => (
-              <div 
-                key={i} 
-                className="speaker-bar" 
-                style={{ 
-                  height: `${4 + (volume * (12 + (i % 3 === 0 ? 8 : 4)))}px`,
-                  opacity: 0.4 + (volume * 0.6)
-                }} 
-              />
-            ))}
+          <div className="speaker-visualizer-container">
+            <div className="speaker-visualizer">
+              {[...Array(12)].map((_, i) => (
+                <div 
+                  key={i} 
+                  className="speaker-bar" 
+                  style={{ 
+                    height: `${4 + (volume * (16 + (i % 4 === 0 ? 12 : i % 2 === 0 ? 8 : 4)))}px`,
+                    opacity: 0.5 + (volume * 0.5)
+                  }} 
+                />
+              ))}
+            </div>
           </div>
         )}
 
-        <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="header-right">
           <button 
              onClick={handleConnectToggle} 
              className="connect-btn"

@@ -97,26 +97,35 @@
     --------------------------------------------------- */
     .header {
       position: relative; z-index: 10; display: flex; justify-content: space-between; align-items: center;
-      padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+      padding: max(16px, env(safe-area-inset-top)) 20px 16px;
+      background: linear-gradient(to bottom, var(--bg-main) 0%, transparent 100%);
     }
     .header-left {
-      display: flex; align-items: center; background-color: var(--bg-chip);
-      padding: 8px 14px; border-radius: 20px; font-size: 14px; font-weight: 600;
+      display: flex; align-items: center; gap: 10px;
     }
 
     .header-right { display: flex; align-items: center; gap: 8px; }
     
+    .speaker-visualizer-container {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
     .speaker-visualizer {
       display: flex;
       align-items: center;
-      gap: 3px;
-      height: 20px;
+      justify-content: center;
+      gap: 4px;
+      height: 32px;
     }
     .speaker-bar {
-      width: 3px;
-      background-color: var(--accent-active);
-      border-radius: 2px;
-      transition: height 0.1s ease;
+      width: 4px;
+      background: linear-gradient(to top, var(--accent-active), #fff);
+      border-radius: 4px;
+      transition: height 0.08s ease, opacity 0.1s ease;
+      box-shadow: 0 0 10px rgba(203, 251, 69, 0.3);
     }
 
     .connect-btn {
