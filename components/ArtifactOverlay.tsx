@@ -435,8 +435,8 @@ export const ArtifactOverlay: React.FC = () => {
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 10 }}
       transition={{ duration: 0.3, ease: [0.2, 0, 0, 1] }}
-      className="mx-4 my-2 flex flex-col bg-[#0c0e12] rounded-[24px] overflow-hidden border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)] relative"
-      style={{ maxHeight: '42vh', minHeight: '300px', zIndex: 20 }}
+      className="flex flex-col bg-[#0d1117] rounded-[24px] overflow-hidden border border-[#263040] relative w-full aspect-[16/9]"
+      style={{ zIndex: 5 }}
     >
       {/* Top Window Bar */}
       <div className="flex items-center justify-between px-4 h-[44px] border-b border-white/5 bg-[#0c0e12] shrink-0">

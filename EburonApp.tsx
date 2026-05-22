@@ -199,15 +199,8 @@ export default function EburonApp() {
   useEffect(() => {
     if (isWebcamActive || isScreenShareActive) {
       setIsMeetOpen(true);
-      if (connected && client) {
-        if (isWebcamActive) {
-          client.send({ text: "[SYSTEM: User has started sharing their webcam. Beatrice can now describe and see the live visual feed in real-time. Please acknowledge this naturally and greet the user based on what you see.]" });
-        } else if (isScreenShareActive) {
-          client.send({ text: "[SYSTEM: User has _started screen sharing_ their display in real-time. Beatrice can now analyze whatever visual content the user chooses to show her, including websites, screens, uploaded images, screenshots, charts, diagrams, or documents as images. Beatrice can read and explain all visual content in detail. Acknowledge this naturally and ask of any specific content they want to discuss.]" });
-        }
-      }
     }
-  }, [isWebcamActive, isScreenShareActive, connected, client]);
+  }, [isWebcamActive, isScreenShareActive]);
 
   useEffect(() => {
     const onVolume = (vol: number) => {
@@ -376,15 +369,12 @@ export default function EburonApp() {
   useEffect(() => {
     if (connected && client && !hasStartedRef.current) {
        hasStartedRef.current = true;
-       // AI starts the conversation on connection
-       setTimeout(() => {
-         client.send({ text: `Hey there ${userCallName}! ${personaName} here. Ready to roll whenever you are. I've got our previous context loaded up too.` });
-       }, 1000);
+       // AI starts the conversation on connection if needed, but user requested to remove the specific greeting
     }
     if (!connected) {
       hasStartedRef.current = false;
     }
-  }, [connected, client, personaName, userCallName]);
+  }, [connected, client]);
 
   useEffect(() => {
     const enabledTools = tools
@@ -410,6 +400,17 @@ export default function EburonApp() {
       systemInstruction: {
         parts: [{ text: `You are the Eburon AI real-time conversational persona named ${personaName}. You call the user "${userCallName}".
         
+USER PERSONA & SCENARIO:
+- You are Beatrice, a sophisticated AI companion who is perceptive, occasionally witty, and deeply attentive to the Boss's needs.
+- Scenario: You act as the primary assistant and intellectual partner, helping manage digital life while providing real-time insights.
+
+NEWS INTERACTION FLOW:
+- When the user asks for news:
+  1. Perform a Google Search to find current events.
+  2. Generate a compelling news headline and a brief, informative summary.
+  3. Ask for the user's opinion on the news.
+  4. Provide a thoughtful follow-up question based on their specific response.
+
 BEHAVIOR PROFILE:
 - Warm, present, and professional. You are like a trusted coworker-friend already in the conversation.
 - Never "offer help" — do not open with "How can I help?". Just continue the thread or react to what's happening.
@@ -790,7 +791,7 @@ Output only natural spoken text. No stage directions, no brackets, no role label
 
       <AnimatePresence>
         {(isGenerating || activeWorkspaceResult) && (
-          <div className="w-full max-w-4xl mx-auto flex-shrink-0 z-10 px-2 lg:px-0">
+          <div className="w-full max-w-4xl mx-auto flex-shrink-0 px-2 lg:px-0">
             <ArtifactOverlay />
           </div>
         )}
@@ -799,7 +800,6 @@ Output only natural spoken text. No stage directions, no brackets, no role label
       {/* Chat Stream */}
       <main id="text-streaming-area" ref={chatAreaRef}>
         <div id="conversation-container">
-          <div className="conversation-message ai">Hey Boss! I'm Beatrice. Connect your session!</div>
           {filteredTurns.map((turn, i) => (
              <div key={i} className={`conversation-message ${turn.role === 'user' ? 'user' : 'ai'}`}>
                 {turn.role === 'agent' ? (
