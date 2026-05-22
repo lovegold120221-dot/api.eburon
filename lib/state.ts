@@ -642,7 +642,7 @@ export interface ConversationTurn {
 export const useLogStore = create<{
   turns: ConversationTurn[];
   addTurn: (turn: Omit<ConversationTurn, 'timestamp'>) => void;
-  updateLastTurn: (update: Partial<ConversationTurn>) => void;
+  updateLastTurn: (update: Partial<ConversationTurn> | ((prev: ConversationTurn) => Partial<ConversationTurn>)) => void;
   clearTurns: () => void;
 }>((set, get) => ({
   turns: [],
@@ -650,13 +650,17 @@ export const useLogStore = create<{
     set(state => ({
       turns: [...state.turns, { ...turn, timestamp: new Date() }],
     })),
-  updateLastTurn: (update: Partial<Omit<ConversationTurn, 'timestamp'>>) => {
+  updateLastTurn: (
+    update: Partial<Omit<ConversationTurn, 'timestamp'>> | ((prev: ConversationTurn) => Partial<Omit<ConversationTurn, 'timestamp'>>)
+  ) => {
     set(state => {
       if (state.turns.length === 0) {
         return state;
       }
       const newTurns = [...state.turns];
-      const lastTurn = { ...newTurns[newTurns.length - 1], ...update };
+      const prevTurn = newTurns[newTurns.length - 1];
+      const appliedUpdate = typeof update === 'function' ? update(prevTurn) : update;
+      const lastTurn = { ...prevTurn, ...appliedUpdate };
       newTurns[newTurns.length - 1] = lastTurn;
       return { turns: newTurns };
     });

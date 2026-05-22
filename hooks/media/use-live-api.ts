@@ -789,7 +789,7 @@ export function useLiveApi({
       const { addTurn, updateLastTurn, turns } = useLogStore.getState();
       const last = turns[turns.length - 1];
       if (last && last.role === 'user' && !last.isFinal) {
-        updateLastTurn({ text: last.text + text, isFinal });
+        updateLastTurn((prev) => ({ text: prev.text + text, isFinal }));
       } else {
         addTurn({ role: 'user', text, isFinal });
       }
@@ -808,7 +808,7 @@ export function useLiveApi({
       const last = turns.at(-1);
 
       if (last?.role === 'agent' && !last.isFinal) {
-        updateLastTurn({ text: last.text + text });
+        updateLastTurn((prev) => ({ text: prev.text + text }));
       } else {
         addTurn({ role: 'agent', text, isFinal: false });
       }
@@ -823,13 +823,17 @@ export function useLiveApi({
     };
 
     const handleOutputTranscription = (text: string, isFinal: boolean) => {
+      // NOTE: We comment this out to prevent duplicating the generated text
+      // since handleContent already accumulates the model's text output via serverContent.modelTurn.
+      /*
       const { addTurn, updateLastTurn, turns } = useLogStore.getState();
       const last = turns[turns.length - 1];
       if (last && last.role === 'agent' && !last.isFinal) {
-        updateLastTurn({ text: last.text + text, isFinal });
+        updateLastTurn((prev) => ({ text: prev.text + text, isFinal }));
       } else {
         addTurn({ role: 'agent', text, isFinal });
       }
+      */
     };
 
     client.on('inputTranscription', handleInputTranscription);
