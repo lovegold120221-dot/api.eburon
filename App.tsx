@@ -7,10 +7,10 @@ import { LiveAPIProvider } from './contexts/LiveAPIContext';
 import EburonApp from './EburonApp';
 import { GooglePicker } from './components/GooglePicker';
 
-const API_KEY = process.env.GEMINI_API_KEY || '';
+const API_KEY = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || '';
 
 if (typeof API_KEY !== 'string' || API_KEY.length === 0) {
-  console.error('Missing required environment variable: GEMINI_API_KEY');
+  console.warn('Missing required environment variable: GEMINI_API_KEY (You can set it in Settings)');
 }
 
 /**

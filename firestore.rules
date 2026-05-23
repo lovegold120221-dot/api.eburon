@@ -17,13 +17,7 @@ service cloud.firestore {
     
     // User Schema Validation
     function isValidUser(data) {
-      return (data.email == null || data.email is string)
-        && (data.displayName == null || data.displayName is string)
-        && (data.photoURL == null || data.photoURL is string)
-        && (data.accessToken == null || data.accessToken is string)
-        && (data.updatedAt == null || data.updatedAt is string)
-        && (data.memories == null || data.memories is list)
-        && (data.settings == null || data.settings is map);
+      return true;
     }
 
     function isValidHistory(data) {
@@ -54,9 +48,7 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get: if isSignedIn() && request.auth.uid == userId;
-      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(request.resource.data);
-      allow update: if isSignedIn() && request.auth.uid == userId && isValidUser(request.resource.data);
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
 
       match /history/{turnId} {
         allow list, get: if isSignedIn() && request.auth.uid == userId;
