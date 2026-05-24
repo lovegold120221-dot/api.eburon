@@ -136,9 +136,9 @@ export default function EburonApp() {
   const [whatsappInfo, setWhatsappInfo] = useState<any>(null);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
 
-  const fetchWhatsappStatus = () => {
+  const fetchWhatsappStatus = async () => {
     setWhatsappLoading(true);
-    const token = useTokenStore.getState().token;
+    const token = await getAccessToken();
     fetch('/api/whatsapp/status', {
       headers: {
         'Authorization': `Bearer ${token}`
@@ -160,9 +160,9 @@ export default function EburonApp() {
       fetchWhatsappStatus();
       
       // Poll if QR is shown and user hasn't connected
-      const interval = setInterval(() => {
+      const interval = setInterval(async () => {
         if (!whatsappInfo?.connected) {
-          const token = useTokenStore.getState().token;
+          const token = await getAccessToken();
           fetch('/api/whatsapp/status', {
              headers: { 'Authorization': `Bearer ${token}` }
           })
@@ -175,9 +175,9 @@ export default function EburonApp() {
     }
   }, [activeOverlay, whatsappInfo?.connected]);
 
-  const handleGenerateQR = () => {
+  const handleGenerateQR = async () => {
     setWhatsappLoading(true);
-    const token = useTokenStore.getState().token;
+    const token = await getAccessToken();
     fetch('/api/whatsapp/connect', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -187,9 +187,9 @@ export default function EburonApp() {
     .catch(() => setWhatsappLoading(false));
   };
 
-  const handleDisconnect = () => {
+  const handleDisconnect = async () => {
     setWhatsappLoading(true);
-    const token = useTokenStore.getState().token;
+    const token = await getAccessToken();
     fetch('/api/whatsapp/disconnect', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
