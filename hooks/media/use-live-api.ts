@@ -830,11 +830,36 @@ export function useLiveApi({
            const { personaName, voice, language, systemPrompt } = fc.args as any;
            const uiState = await import('../../lib/state');
            const settings = uiState.useSettings.getState();
+           
+           // Update Local State
            if (personaName) settings.setPersonaName(personaName);
            if (voice) settings.setVoice(voice);
            if (language) settings.setLanguage(language);
            if (systemPrompt) settings.setSystemPrompt(systemPrompt);
-           responsePayload = { status: 'Persona updated successfully' };
+
+           // Persist to Backend
+           try {
+               const token = await getFirebaseIdToken();
+               if (token) {
+                   await fetch('/api/settings', {
+                       method: 'PUT',
+                       headers: { 
+                           'Authorization': `Bearer ${token}`,
+                           'Content-Type': 'application/json'
+                       },
+                       body: JSON.stringify({
+                           persona_name: personaName || settings.personaName,
+                           voice: voice || settings.voice,
+                           language: language || settings.language,
+                           system_prompt: systemPrompt || settings.systemPrompt
+                       })
+                   });
+               }
+           } catch (e) {
+               console.error('Failed to persist settings:', e);
+           }
+
+           responsePayload = { status: 'Persona updated and persisted successfully' };
         }
 
         if (fc.name === 'manage_function_tool') {
@@ -843,30 +868,37 @@ export function useLiveApi({
            const toolStore = uiState.useTools.getState();
            if (action === 'add') {
                toolStore.addTool({ ...toolDefinition, isEnabled: true });
-               responsePayload = { status: `Tool ${toolDefinition.name} added successfully` };
+               responsePayload = { status: `Tool ${toolDefinition.name} added to local session library.` };
            } else if (action === 'remove') {
                toolStore.removeTool(toolName);
-               responsePayload = { status: `Tool ${toolName} removed successfully` };
+               responsePayload = { status: `Tool ${toolName} removed from local session library.` };
            } else if (action === 'update') {
                toolStore.updateTool(toolName, toolDefinition);
-               responsePayload = { status: `Tool ${toolName} updated successfully` };
+               responsePayload = { status: `Tool ${toolName} updated in local session library.` };
            }
         }
 
         if (fc.name === 'voice_command_optimizer') {
            const { analysis_depth } = fc.args as any;
-           const uiState = await import('../../lib/state');
-           const logs = uiState.useLogStore.getState().turns;
-           // Simulate analysis
-           const recentUserTurns = logs.filter(t => t.role === 'user').slice(-10);
-           const suggestions = recentUserTurns.length > 0 
-              ? [`Suggested shortcut for "${recentUserTurns[0].text.substring(0, 20)}..." -> "Quick Task"`]
-              : ["No clear patterns identified yet. Try using more varied commands!"];
-           
-           responsePayload = { 
-              analysis: `Analyzed ${recentUserTurns.length} recent turns with ${analysis_depth} depth.`,
-              suggestions 
-           };
+           try {
+               const token = await getFirebaseIdToken();
+               const limit = analysis_depth === 'detailed' ? 100 : 20;
+               const res = await fetch(`/api/history?limit=${limit}`, {
+                   headers: { 'Authorization': `Bearer ${token}` }
+               });
+               const history = await res.json();
+               
+               responsePayload = { 
+                  status: `Successfully retrieved ${history.length} historical turns for analysis.`,
+                  history: history.map((h: any) => ({
+                      role: h.role,
+                      text: h.text,
+                      timestamp: h.created_at
+                  }))
+               };
+           } catch (e: any) {
+               responsePayload = { error: `Failed to retrieve history for optimization: ${e.message}` };
+           }
         }
 
         if (fc.name === 'test_voice_response') {

@@ -1563,12 +1563,16 @@ async function startServer() {
 
     googleWs.on('close', (code, reason) => {
       console.log(`GenAI Proxy: Google closed connection (${code}): ${reason}`);
-      clientWs.close(code, reason.toString());
+      if (clientWs.readyState === WS.OPEN) {
+        clientWs.close(code || 1000, reason ? reason.toString() : '');
+      }
     });
 
     clientWs.on('close', (code, reason) => {
       console.log(`GenAI Proxy: Client closed connection (${code}): ${reason}`);
-      googleWs.close(code, reason.toString());
+      if (googleWs.readyState === WS.OPEN) {
+        googleWs.close(code || 1000, reason ? reason.toString() : '');
+      }
     });
 
     googleWs.on('error', (err) => {

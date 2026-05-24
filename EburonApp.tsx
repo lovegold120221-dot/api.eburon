@@ -403,6 +403,7 @@ export default function EburonApp() {
               if (settingsData.system_prompt) setSettings.setSystemPrompt(settingsData.system_prompt);
               if (settingsData.voice) setSettings.setVoice(settingsData.voice);
               if (settingsData.language) setSettings.setLanguage(settingsData.language);
+              if (settingsData.model) setSettings.setModel(settingsData.model);
               if (settingsData.tools) useTools.getState().setTools(settingsData.tools);
           }
 
