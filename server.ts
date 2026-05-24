@@ -534,25 +534,33 @@ async function startServer() {
   });
 
   app.get('/api/whatsapp/chats', authenticateToken, async (req: any, res) => {
-    const userId = req.user.uid;
-    const jid = req.query.jid;
-    const userMessages = waMessages.get(userId);
-    if (!userMessages) {
-      return res.json({ chats: [] });
+    try {
+      const userId = req.user.uid;
+      const jid = req.query.jid;
+      const firestore = getFirestoreDb();
+      const messagesRef = firestore.collection('users').doc(userId).collection('whatsapp_messages');
+      
+      if (jid) {
+        // Find messages where phone matches the JID
+        const snapshot = await messagesRef.where('phone', '==', jid).orderBy('timestamp', 'desc').limit(50).get();
+        const msgs = snapshot.docs.map((doc: any) => doc.data()).reverse(); // return descending order of time or chronological? chronological is better if reverse: earliest first
+        return res.json({ chats: [{ jid, messages: msgs }] });
+      }
+
+      // If no JID, return recent chats
+      const snapshot = await messagesRef.orderBy('timestamp', 'desc').limit(200).get();
+      const recentChatsMap = new Map<string, any>();
+      snapshot.docs.forEach((doc: any) => {
+        const data = doc.data();
+        if (!data.phone) return;
+        if (!recentChatsMap.has(data.phone)) {
+           recentChatsMap.set(data.phone, { jid: data.phone, lastMessage: data });
+        }
+      });
+      res.json({ chats: Array.from(recentChatsMap.values()) });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
-    if (jid) {
-      const msgs = userMessages.get(jid as string) || [];
-      return res.json({ chats: [{ jid, messages: msgs }] });
-    }
-    const chatsArray = Array.from(userMessages.keys()).map(jid => {
-      const msgs = userMessages.get(jid) || [];
-      const lastMessage = msgs[msgs.length - 1];
-      return {
-        jid,
-        lastMessage
-      };
-    });
-    res.json({ chats: chatsArray });
   });
 
   app.post('/api/whatsapp/send', authenticateToken, async (req: any, res) => {
