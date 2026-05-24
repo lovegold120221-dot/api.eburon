@@ -14,7 +14,9 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const DIST_PATH = path.join(process.cwd(), 'dist');
 
 import QRCode from 'qrcode';
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import * as baileys from '@whiskeysockets/baileys';
+const makeWASocket = (typeof baileys.default === 'function') ? baileys.default : ((baileys as any).makeWASocket || baileys);
+const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = baileys;
 import Pino from 'pino';
 
 // Initialize Firebase Admin lazily
@@ -23,13 +25,20 @@ function getFirebaseAdmin() {
   if (!admin.apps.length) {
     let projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
     
-    if (!projectId && fs.existsSync('./firebase-applet-config.json')) {
+    if (!projectId) {
       try {
-        const config = JSON.parse(fs.readFileSync('./firebase-applet-config.json', 'utf8'));
-        projectId = config.projectId;
+        const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+        if (fs.existsSync(configPath)) {
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          projectId = config.projectId;
+        }
       } catch (e) {
         console.warn('Failed to parse firebase config from file:', e);
       }
+    }
+
+    if (!projectId) {
+      projectId = "gen-lang-client-0836251512";
     }
 
     try {
@@ -38,9 +47,9 @@ function getFirebaseAdmin() {
       } else {
         admin.initializeApp();
       }
-      console.log('Firebase Admin initialized');
-    } catch (e) {
-      console.warn('Firebase Admin initialization failed:', e);
+      console.log('Firebase Admin initialized. apps.length:', admin.apps.length);
+    } catch (e: any) {
+      console.warn('Firebase Admin initialization failed:', e.message || e);
     }
   }
   return admin;
@@ -49,7 +58,7 @@ function getFirebaseAdmin() {
 let firestoreDb: any = null;
 function getFirestoreDb() {
   if (!firestoreDb) {
-    const adminApp = getFirebaseAdmin();
+    const adminApp = getFirebaseAdmin().app();
     let databaseId: string | undefined;
     try {
       const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
@@ -129,6 +138,12 @@ async function startBaileysSession(userId: string) {
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
+
+  app.use((req, res, next) => {
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+    next();
+  });
 
   app.use(express.json());
 

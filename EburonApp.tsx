@@ -219,16 +219,27 @@ export default function EburonApp() {
   };
 
   useEffect(() => {
-    const loadPicker = () => {
-      if ((window as any).gapi) {
+    const initGapi = () => {
+      if ((window as any).gapi && typeof (window as any).gapi.load === 'function') {
         (window as any).gapi.load('picker', {
-          callback: () => setIsPickerLoaded(true)
+          callback: () => setIsPickerLoaded(true),
+          onerror: () => console.error('GAPI load failed'),
+          timeout: 5000
         });
-      } else {
-        setTimeout(loadPicker, 500);
       }
     };
-    loadPicker();
+
+    if (!document.querySelector('script[src*="apis.google.com/js/api.js"]')) {
+      const script = document.createElement('script');
+      script.src = "https://apis.google.com/js/api.js";
+      script.async = true;
+      script.defer = true;
+      script.crossOrigin = "anonymous";
+      script.onload = initGapi;
+      document.head.appendChild(script);
+    } else {
+      initGapi();
+    }
   }, []);
 
   const handleOpenPicker = async () => {
