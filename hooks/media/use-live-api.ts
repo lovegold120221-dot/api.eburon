@@ -695,13 +695,15 @@ export function useLiveApi({
         if (fc.name === 'search_places') {
             const { query, location, radius } = fc.args as any;
             try {
-                const url = new URL('https://maps.googleapis.com/maps/api/place/textsearch/json');
+                const token = await getFirebaseIdToken();
+                const url = new URL('/api/maps/search', window.location.origin);
                 url.searchParams.append('query', query);
-                url.searchParams.append('key', apiKey);
                 if (location) url.searchParams.append('location', location);
                 if (radius) url.searchParams.append('radius', radius.toString());
                 
-                const res = await fetch(url.toString());
+                const res = await fetch(url.toString(), {
+                   headers: { 'Authorization': `Bearer ${token}` }
+                });
                 responsePayload = await res.json();
             } catch (e: any) {
                 responsePayload = { error: e.message };
@@ -711,8 +713,10 @@ export function useLiveApi({
         if (fc.name === 'get_place_details') {
             const { place_id } = fc.args as any;
             try {
-                const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place_id}&key=${apiKey}`;
-                const res = await fetch(url);
+                const token = await getFirebaseIdToken();
+                const res = await fetch(`/api/maps/details?place_id=${place_id}`, {
+                   headers: { 'Authorization': `Bearer ${token}` }
+                });
                 responsePayload = await res.json();
             } catch (e: any) {
                 responsePayload = { error: e.message };
@@ -722,8 +726,11 @@ export function useLiveApi({
         if (fc.name === 'get_directions') {
             const { origin, destination, mode } = fc.args as any;
             try {
-                const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&mode=${mode || 'driving'}&key=${apiKey}`;
-                const res = await fetch(url);
+                const token = await getFirebaseIdToken();
+                const url = `/api/maps/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&mode=${mode || 'driving'}`;
+                const res = await fetch(url, {
+                   headers: { 'Authorization': `Bearer ${token}` }
+                });
                 responsePayload = await res.json();
             } catch (e: any) {
                 responsePayload = { error: e.message };
@@ -798,13 +805,16 @@ export function useLiveApi({
         } else if (fc.name === 'youtube_search') {
            const { query } = fc.args as any;
            try {
-              const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&maxResults=5&type=video&key=${apiKey}`;
-              const res = await fetch(url);
+              const token = await getFirebaseIdToken();
+              const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(query)}`, {
+                 headers: { 'Authorization': `Bearer ${token}` }
+              });
               responsePayload = await res.json();
            } catch (e: any) {
               responsePayload = { error: e.message };
            }
         }
+
          if (fc.name === 'open_eburon_asset_studio') {
              responsePayload = { status: `Eburon Asset + Document Studio opened successfully` };
              const uiState = await import('../../lib/state');

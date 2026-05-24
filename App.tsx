@@ -7,18 +7,12 @@ import { LiveAPIProvider } from './contexts/LiveAPIContext';
 import EburonApp from './EburonApp';
 import { GooglePicker } from './components/GooglePicker';
 
-const API_KEY = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || '';
-
-if (typeof API_KEY !== 'string' || API_KEY.length === 0) {
-  console.warn('Missing required environment variable: GEMINI_API_KEY (You can set it in Settings)');
-}
-
 /**
  * Main application component that provides a streaming interface for Live API.
  */
 function App() {
   return (
-    <LiveAPIProvider apiKey={API_KEY}>
+    <LiveAPIProvider apiKey="PROXY">
       <EburonApp />
       <GooglePicker />
     </LiveAPIProvider>

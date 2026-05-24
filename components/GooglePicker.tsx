@@ -50,11 +50,15 @@ export const GooglePicker = () => {
         return;
       }
 
+      // Fetch dynamic config for developer key
+      const configRes = await fetch('/api/config');
+      const config = await configRes.json();
+
       const picker = new google.picker.PickerBuilder()
         .addView(google.picker.ViewId.DOCS)
         .addView(google.picker.ViewId.FOLDERS)
         .setOAuthToken(token)
-        .setDeveloperKey(firebaseConfig.apiKey)
+        .setDeveloperKey(config.firebase.apiKey)
         .setCallback((data: any) => {
           if (data.action === google.picker.Action.PICKED) {
             const documents = data.docs.map((doc: any) => ({

@@ -19,6 +19,31 @@ import { DEFAULT_LIVE_API_MODEL } from './constants';
 import { difference } from 'lodash';
 import { base64ToArrayBuffer } from './utils';
 
+// CAPTURE AND MASK WEBSOCKET BEFORE SDK USES IT
+const G_WS_URL = 'generativelanguage.googleapis.com';
+const LOCAL_PROXY_PATH = '/ws/genai';
+
+if (typeof window !== 'undefined') {
+  const OriginalWebSocket = window.WebSocket;
+  
+  const MaskedWebSocket = function(url: string | URL, protocols?: string | string[]) {
+    let urlStr = url.toString();
+    if (urlStr.includes(G_WS_URL)) {
+      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      const host = window.location.host;
+      const newUrl = `${protocol}://${host}${LOCAL_PROXY_PATH}`;
+      console.log(`GenAI Live Client: Proxying ${G_WS_URL} -> ${newUrl}`);
+      return new OriginalWebSocket(newUrl, protocols);
+    }
+    return new OriginalWebSocket(url, protocols);
+  };
+
+  // Preserve static constants
+  MaskedWebSocket.prototype = OriginalWebSocket.prototype;
+  Object.assign(MaskedWebSocket, OriginalWebSocket);
+  (window as any).WebSocket = MaskedWebSocket;
+}
+
 /**
  * Represents a single log entry in the system.
  * Used for tracking and displaying system events, messages, and errors.
@@ -90,7 +115,7 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
     if (model) this.model = model;
 
     this.client = new GoogleGenAI({
-      apiKey: apiKey,
+      apiKey: 'PROXY',
     });
   }
 
