@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import os from 'os';
 import { createServer as createViteServer } from 'vite';
 import admin from 'firebase-admin';
 import dotenv from 'dotenv';
@@ -19,20 +20,27 @@ import Pino from 'pino';
 // Initialize Firebase Admin lazily
 let adminInitialized = false;
 function getFirebaseAdmin() {
-  if (!adminInitialized) {
-    const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
-    if (projectId) {
+  if (!admin.apps.length) {
+    let projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
+    
+    if (!projectId && fs.existsSync('./firebase-applet-config.json')) {
       try {
-        admin.initializeApp({
-          projectId: projectId,
-        });
-        adminInitialized = true;
-        console.log('Firebase Admin initialized');
+        const config = JSON.parse(fs.readFileSync('./firebase-applet-config.json', 'utf8'));
+        projectId = config.projectId;
       } catch (e) {
-        console.warn('Firebase Admin initialization failed:', e);
+        console.warn('Failed to parse firebase config from file:', e);
       }
-    } else {
-      console.warn('FIREBASE_PROJECT_ID not set, Firebase Admin not initialized');
+    }
+
+    try {
+      if (projectId) {
+        admin.initializeApp({ projectId });
+      } else {
+        admin.initializeApp();
+      }
+      console.log('Firebase Admin initialized');
+    } catch (e) {
+      console.warn('Firebase Admin initialization failed:', e);
     }
   }
   return admin;
@@ -66,8 +74,11 @@ const waSessions = new Map<string, any>();
 const waQRs = new Map<string, string>();
 const waStates = new Map<string, any>(); 
 
+const getAuthPath = (userId: string) => path.join(os.tmpdir(), `baileys_auth_${userId}`);
+
 async function startBaileysSession(userId: string) {
-  const { state, saveCreds } = await useMultiFileAuthState(`/tmp/baileys_auth_${userId}`);
+  const authPath = getAuthPath(userId);
+  const { state, saveCreds } = await useMultiFileAuthState(authPath);
   const { version } = await fetchLatestBaileysVersion();
   
   const sock = makeWASocket({
@@ -98,8 +109,9 @@ async function startBaileysSession(userId: string) {
         waSessions.delete(userId);
         waQRs.delete(userId);
         waStates.delete(userId);
-        if (fs.existsSync(`/tmp/baileys_auth_${userId}`)) {
-          fs.rmSync(`/tmp/baileys_auth_${userId}`, { recursive: true, force: true });
+        const authPath = getAuthPath(userId);
+        if (fs.existsSync(authPath)) {
+          fs.rmSync(authPath, { recursive: true, force: true });
         }
       }
     } else if (connection === 'open') {
@@ -117,11 +129,6 @@ async function startBaileysSession(userId: string) {
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
-
-  app.use((req, res, next) => {
-    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-    next();
-  });
 
   app.use(express.json());
 
@@ -281,11 +288,16 @@ async function startServer() {
   });
 
   app.post('/api/whatsapp/connect', authenticateToken, async (req: any, res) => {
-    const userId = req.user.uid;
-    if (!waSessions.has(userId)) {
-      await startBaileysSession(userId);
+    try {
+      const userId = req.user.uid;
+      if (!waSessions.has(userId)) {
+        await startBaileysSession(userId);
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      console.error('Baileys start error', e);
+      res.status(500).json({ error: e.message });
     }
-    res.json({ success: true });
   });
 
   app.post('/api/whatsapp/disconnect', authenticateToken, async (req: any, res) => {
@@ -297,8 +309,9 @@ async function startServer() {
     waSessions.delete(userId);
     waQRs.delete(userId);
     waStates.delete(userId);
-    if (fs.existsSync(`/tmp/baileys_auth_${userId}`)) {
-      fs.rmSync(`/tmp/baileys_auth_${userId}`, { recursive: true, force: true });
+    const authPath = getAuthPath(userId);
+    if (fs.existsSync(authPath)) {
+      fs.rmSync(authPath, { recursive: true, force: true });
     }
     res.json({ success: true });
   });
