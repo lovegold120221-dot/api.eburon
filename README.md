@@ -12,11 +12,12 @@ Welcome to **Eburon AI**, a high-performance, self-hosted executive assistant po
 
 Eburon AI is built on a modern, secure, and private infrastructure:
 
-- **Frontend:** React (Vite) + TypeScript + Tailwind CSS.
+- **Frontend:** React (Vite) + TypeScript + Framer Motion.
 - **Backend:** Node.js (Express) + WebSocket Proxy (Proxying Gemini Live API v1beta).
-- **Database:** Self-hosted **Supabase** (PostgreSQL) running on Docker.
+- **Database:** Supabase (PostgreSQL) for managed data persistence.
 - **Authentication:** Firebase Auth (Client-side) + Firebase Admin SDK (Server-side).
 - **Messaging:** Integrated with **Meta WhatsApp Cloud API** and **Baileys** for persistent device linking.
+- **Dynamic Config:** Application secrets (Meta Tokens, API Keys) are stored in a managed `system_config` table for persistence across redeployments.
 
 ---
 
@@ -101,6 +102,26 @@ server {
 npm run build
 npm start
 \`\`\`
+
+---
+
+## 🗄️ Database Schema (Full App Database)
+
+Eburon AI utilizes a comprehensive, multi-user isolated schema within Supabase:
+
+### 👤 Identity & Configuration
+- **\`users\`**: Central identity table storing Firebase UID, personalized persona settings (name, voice, model), long-term system prompts, and location data.
+
+### 📱 WhatsApp Ecosystem
+- **\`whatsapp_contacts\`**: Structured storage for your WhatsApp communication network, including names and JIDs.
+- **\`whatsapp_chats\`**: Real-time tracking of conversation metadata, unread counts, and last message snippets.
+- **\`whatsapp_messages\`**: Persistent, high-fidelity log of every incoming and outgoing message with rich metadata support.
+
+### 🧠 Intelligence & Productivity
+- **\`conversation_history\`**: Unified, chronological log of all voice and text interactions, used for AI contextual awareness.
+- **\`memories\`**: Core long-term memories and user-specific facts that Beatrice uses to personalize her behavior.
+- **\`notes\`**: Permanent, structured textual information saved by the user or extracted by the AI.
+- **\`tasks\`**: Dynamic checklist and task management system for professional productivity.
 
 ---
 

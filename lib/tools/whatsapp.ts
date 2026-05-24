@@ -90,6 +90,58 @@ export const whatsappTools: FunctionCall[] = [
     },
     isEnabled: true,
     scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'delete_whatsapp_message',
+    description: 'Deletes a specific WhatsApp message from the internal database by its ID.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        id: {
+          type: 'STRING',
+          description: 'The unique UUID of the message in the Eburon database.',
+        },
+      },
+      required: ['id'],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'delete_whatsapp_chat',
+    description: 'Deletes an entire chat and all its associated messages from the internal database.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        jid: {
+          type: 'STRING',
+          description: 'The WhatsApp JID of the chat to delete.',
+        },
+      },
+      required: ['jid'],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'update_whatsapp_contact',
+    description: 'Updates a contact\'s local display name or nickname in the Eburon database.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        jid: {
+          type: 'STRING',
+          description: 'The WhatsApp JID of the contact.',
+        },
+        name: {
+          type: 'STRING',
+          description: 'The new nickname or display name for the contact.',
+        },
+      },
+      required: ['jid', 'name'],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
   }
 ];
 

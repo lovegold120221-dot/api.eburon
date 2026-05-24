@@ -5,6 +5,9 @@
 import { create } from 'zustand';
 import { personalAssistantTools } from './tools/personal-assistant';
 import { whatsappTools } from './tools/whatsapp';
+import { voiceDevTools } from './tools/voice-dev';
+import { autonomousSystemTools } from './tools/autonomous';
+import { freeLlmTools } from './tools/free-llm';
 import { FunctionResponseScheduling } from '@google/genai';
 
 export const workspaceTools: FunctionCall[] = [
@@ -445,7 +448,7 @@ export const workspaceTools: FunctionCall[] = [
 export type Template = 'personal-assistant';
 
 const toolsets: Record<Template, FunctionCall[]> = {
-  'personal-assistant': [...personalAssistantTools, ...workspaceTools, ...whatsappTools],
+  'personal-assistant': [...personalAssistantTools, ...workspaceTools, ...whatsappTools, ...voiceDevTools, ...autonomousSystemTools, ...freeLlmTools],
 };
 
 const systemPrompts: Record<Template, string> = {
@@ -510,6 +513,7 @@ ELITE CAPABILITIES & TOOL MASTERY:
 - Productivity & Memory: You never forget anything. You proactively store key info to memory (save_memory, search_memories), take permanent notes (save_note, list_notes, read_note), and can extract tasks from conversation into interactive checklists (extract_tasks, create_checklist).
 - Interactive Visuals: You can generate rich artifacts like project briefs (create_project_brief), artifacts, and interactive maps.
 - Voice & Tool Development: You are an expert at self-optimization. You can update your own voice persona (update_voice_persona), manage your library of function tools (manage_function_tool), and optimize voice commands (voice_command_optimizer) to better serve the user.
+- Autonomous Orchestration: You can plan and execute multi-step trajectories (plan_autonomous_task, execute_task_step), evaluate your own progress using trajectory scoring (evaluate_trajectory), and deploy new persistent skills (deploy_agent_skill) to expand your cognitive architecture.
 - Real-Time Awareness: You know the exact date, time, and the user's current location. You are self-hosted on a private VPS, using Supabase for ultra-secure, high-speed data persistence.`,
   personaName: 'Beatrice',
   userCallName: 'Boss',

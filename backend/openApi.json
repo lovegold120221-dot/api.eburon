@@ -1,0 +1,198 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Eburon AI API",
+    "version": "1.0.0",
+    "description": "Professional executive assistant API for Beatrice, featuring full WhatsApp, GWS, and Productivity integration.",
+    "contact": {
+      "name": "Ariolas BV / Eburon AI",
+      "url": "https://eburon.ai"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://whatsapp.eburon.ai",
+      "description": "Production Server"
+    },
+    {
+      "url": "http://localhost:1000",
+      "description": "Local Development"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Health Check",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/config": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Get Client Configuration",
+        "description": "Fetches Firebase and Supabase public keys for the frontend.",
+        "responses": { "200": { "description": "Client config payload" } }
+      }
+    },
+    "/api/avatar": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Get Assistant Avatar",
+        "responses": { "302": { "description": "Redirect to avatar image" } }
+      }
+    },
+    "/api/user/sync": {
+      "post": {
+        "tags": ["Identity"],
+        "summary": "Synchronize User Profile",
+        "responses": { "200": { "description": "Success" } }
+      }
+    },
+    "/api/user/location": {
+      "put": {
+        "tags": ["Identity"],
+        "summary": "Update User Location",
+        "responses": { "200": { "description": "Success" } }
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "tags": ["Identity"],
+        "summary": "Get User Settings",
+        "responses": { "200": { "description": "Settings JSON" } }
+      },
+      "put": {
+        "tags": ["Identity"],
+        "summary": "Update User Settings",
+        "responses": { "200": { "description": "Success" } }
+      }
+    },
+    "/api/history": {
+      "get": {
+        "tags": ["AI & Context"],
+        "summary": "Get Conversation History",
+        "responses": { "200": { "description": "Array of history turns" } }
+      },
+      "post": {
+        "tags": ["AI & Context"],
+        "summary": "Save History Turn",
+        "responses": { "201": { "description": "Created" } }
+      }
+    },
+    "/api/memories": {
+      "get": {
+        "tags": ["AI & Context"],
+        "summary": "List Memories",
+        "responses": { "200": { "description": "Array of memories" } }
+      },
+      "post": {
+        "tags": ["AI & Context"],
+        "summary": "Create Memory",
+        "responses": { "201": { "description": "Created" } }
+      }
+    },
+    "/api/notes": {
+      "get": {
+        "tags": ["Productivity"],
+        "summary": "List Notes",
+        "responses": { "200": { "description": "Array of notes" } }
+      },
+      "post": {
+        "tags": ["Productivity"],
+        "summary": "Create Note",
+        "responses": { "201": { "description": "Created" } }
+      }
+    },
+    "/api/tasks": {
+      "get": {
+        "tags": ["Productivity"],
+        "summary": "List Tasks",
+        "responses": { "200": { "description": "Array of tasks" } }
+      },
+      "post": {
+        "tags": ["Productivity"],
+        "summary": "Create Task",
+        "responses": { "201": { "description": "Created" } }
+      }
+    },
+    "/api/whatsapp/status": {
+      "get": {
+        "tags": ["WhatsApp"],
+        "summary": "Get WhatsApp Status",
+        "responses": { "200": { "description": "Status JSON" } }
+      }
+    },
+    "/api/whatsapp/contacts": {
+      "get": {
+        "tags": ["WhatsApp"],
+        "summary": "List WhatsApp Contacts",
+        "responses": { "200": { "description": "Array of contacts" } }
+      }
+    },
+    "/api/whatsapp/chats": {
+      "get": {
+        "tags": ["WhatsApp"],
+        "summary": "List WhatsApp Recent Chats",
+        "responses": { "200": { "description": "Array of chats" } }
+      }
+    },
+    "/api/whatsapp/send": {
+      "post": {
+        "tags": ["WhatsApp"],
+        "summary": "Send WhatsApp Message",
+        "responses": { "200": { "description": "Sent" } }
+      }
+    },
+    "/api/whatsapp/send-template": {
+      "post": {
+        "tags": ["WhatsApp"],
+        "summary": "Send WhatsApp Business Template",
+        "description": "Sends an official Meta WhatsApp Business template message.",
+        "responses": { "200": { "description": "Template sent" } }
+      }
+    },
+    "/api/whatsapp/webhook": {
+      "get": {
+        "tags": ["WhatsApp"],
+        "summary": "Meta Webhook Verification",
+        "description": "Handles Meta's challenge/verification request for the webhook.",
+        "responses": { "200": { "description": "Challenge response" } }
+      },
+      "post": {
+        "tags": ["WhatsApp"],
+        "summary": "Meta Webhook Listener",
+        "description": "Receives real-time message notifications from Meta Cloud API.",
+        "responses": { "200": { "description": "Acknowledged" } }
+      }
+    },
+    "/api/maps/search": {
+      "get": {
+        "tags": ["GWS Proxy"],
+        "summary": "Proxy: Google Maps Search",
+        "responses": { "200": { "description": "Maps results" } }
+      }
+    },
+    "/api/youtube/search": {
+      "get": {
+        "tags": ["GWS Proxy"],
+        "summary": "Proxy: YouTube Search",
+        "responses": { "200": { "description": "YouTube results" } }
+      }
+    }
+  }
+}
