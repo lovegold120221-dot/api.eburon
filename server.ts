@@ -304,11 +304,51 @@ async function startServer() {
     const text = req.body.text;
 
     const sock = waSessions.get(userId);
+    
+    // Feature: Fallback to Eburon Meta WhatsApp Cloud API if user's paired device is not connected.
     if (!sock || !waStates.has(userId)) {
-      return res.status(400).json({
-        error: 'WhatsApp is not connected.',
-        message: 'Please connect WhatsApp using the QR code first.'
-      });
+      const eburonAccessToken = process.env.WHATSAPP_ACCESS_TOKEN || 'EAANxkZCarKo0BRnZBENB3F5VB36J95AXpI6IYaVn6FwJOeRPNUWmA5MhLIyrLoEmDaF3rTaLN0JV8IxzNoBjZBcJZAVwDXSfNwihy7geDZAZCdwQkpXtrYGsGM39V0zpSPAUvqEgCyVvsxiPMkZBssHmFPuwN5lv7I1aXnxzY3l40IoZA0SvCinO6tIZCIrZBLvAZDZD';
+      const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || '1148407841689522';
+      
+      try {
+        const response = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${eburonAccessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: phone.replace(/[^0-9]/g, ''),
+            type: "text",
+            text: {
+              preview_url: false,
+              body: text
+            }
+          })
+        });
+
+        const result = await response.json();
+        
+        try {
+          const firestore = getFirestoreDb();
+          await firestore.collection('users').doc(req.user.uid).collection('whatsapp_messages').add({
+            phone: phone.replace(/[^0-9]/g, ''),
+            text,
+            direction: 'sent',
+            status: result.error ? 'failed' : 'sent',
+            messageId: result.messages?.[0]?.id || null,
+            error: result.error || null,
+            provider: 'meta_cloud_api',
+            timestamp: new Date().toISOString()
+          });
+        } catch (logErr) { }
+
+        return res.json({ success: true, provider: 'meta_cloud', result });
+      } catch (e: any) {
+        return res.status(500).json({ error: e.message });
+      }
     }
 
     try {

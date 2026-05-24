@@ -674,6 +674,18 @@ export function useLiveApi({
            responsePayload = { datetime: new Date().toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone };
         }
 
+        if (fc.name === 'extract_tasks') {
+           const { text } = fc.args as any;
+           // Extract tasks logic. Instead of just saving it anywhere, let's output it to active workspace.
+           responsePayload = { status: `Task extraction processed`, originalText: text };
+           // We can render this out as markdown or json.
+           const uiState = await import('../../lib/state');
+           uiState.useUI.getState().setActiveWorkspaceResult({
+               type: 'markdown',
+               content: `## Extracted Action Items:\n\n*Reviewing the following text:*\n> ${text}\n\n- Task extraction will appear here.`
+           });
+        }
+
         if (fc.name === 'open_browser_url') {
            const { url } = fc.args as any;
            window.open(url, '_blank');

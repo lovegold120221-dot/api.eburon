@@ -4,7 +4,7 @@ import { FunctionResponseScheduling } from '@google/genai';
 export const whatsappTools: FunctionCall[] = [
   {
     name: 'send_whatsapp_message',
-    description: 'Sends a WhatsApp message to a specific phone number using Eburon WhatsApp integration (via paired device). Ensure you have confirmed the user\'s intent and the phone number before sending.',
+    description: 'Sends an official WhatsApp message to a specific phone number using Eburon\'s Meta for Developers WhatsApp Cloud API. Ensure you have confirmed the user\'s intent and the phone number before sending.',
     parameters: {
       type: 'OBJECT',
       properties: {
