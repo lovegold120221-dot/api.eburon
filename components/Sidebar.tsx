@@ -122,6 +122,34 @@ export default function Sidebar() {
               Persona Identity
             </h4>
 
+            {/* Google Authorization Status */}
+            {auth.currentUser && !auth.currentUser.providerData.some(p => p.providerId === 'google.com') && (
+              <div className="bg-[#1a1a1a] border border-[#222] rounded-xl p-4 space-y-3">
+                 <div className="flex items-center gap-2 text-xs font-semibold text-yellow-500">
+                    <Sparkles size={14} />
+                    <span>Google Authorization Required</span>
+                 </div>
+                 <p className="text-[11px] text-gray-500 leading-relaxed">
+                   Connect your Google account to authorize Beatrice to use <strong>GWS Tools</strong> (Calendar, Drive, YouTube, Maps).
+                 </p>
+                 <button 
+                   onClick={async () => {
+                      try {
+                        const { googleSignIn } = await import('@/lib/firebase');
+                        await googleSignIn();
+                        alert('Google account linked successfully! Beatrice now has full GWS access.');
+                      } catch (e: any) {
+                        alert('Failed to link Google: ' + e.message);
+                      }
+                   }}
+                   className="w-full flex items-center justify-center gap-2 bg-white text-black py-2 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors"
+                 >
+                   <div className="w-4 h-4 flex items-center justify-center bg-white rounded-full text-[10px] border border-gray-300">G</div>
+                   Authorize Google Tools
+                 </button>
+              </div>
+            )}
+
             {/* Persona Name */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-gray-400 ml-1">Persona Name</label>

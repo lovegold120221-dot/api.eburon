@@ -31,7 +31,11 @@ if (typeof window !== 'undefined') {
     if (urlStr.includes(G_WS_URL)) {
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
       const host = window.location.host;
-      const newUrl = `${protocol}://${host}${LOCAL_PROXY_PATH}`;
+      
+      // Preserve query string (contains model etc) but the key will be overridden by backend
+      const search = urlStr.includes('?') ? urlStr.substring(urlStr.indexOf('?')) : '';
+      const newUrl = `${protocol}://${host}${LOCAL_PROXY_PATH}${search}`;
+      
       console.log(`GenAI Live Client: Proxying ${G_WS_URL} -> ${newUrl}`);
       return new OriginalWebSocket(newUrl, protocols);
     }

@@ -76,7 +76,7 @@ const waStates = new Map<string, any>();
 const waContacts = new Map<string, Map<string, any>>();
 const waMessages = new Map<string, Map<string, any[]>>();
 
-const SESSION_DIR = path.join(process.cwd(), 'wa_sessions');
+const SESSION_DIR = '/var/lib/beatricee/wa_sessions';
 if (!fs.existsSync(SESSION_DIR)) {
   fs.mkdirSync(SESSION_DIR, { recursive: true });
 }
@@ -198,7 +198,10 @@ async function startBaileysSession(userId: string, email?: string) {
 
   waSessions.set(userId, sock);
 
-  sock.ev.on('creds.update', saveCreds);
+  sock.ev.on('creds.update', () => {
+    console.log(`WhatsApp Credentials Update: Saving for user ${userId}`);
+    saveCreds();
+  });
 
   sock.ev.on('contacts.upsert', async (contacts: any[]) => {
     let userContacts = waContacts.get(userId);
@@ -1465,18 +1468,31 @@ async function startServer() {
   const wss = new WebSocketServer({ server, path: '/ws/genai' });
 
   wss.on('connection', (clientWs, req) => {
+    console.log(`GenAI Proxy: New connection attempt from ${req.socket.remoteAddress}`);
+    
     const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
     if (!apiKey) {
-      console.error("GEMINI_API_KEY is missing in backend .env");
+      console.error("GenAI Proxy ERROR: GEMINI_API_KEY is missing in backend .env");
       clientWs.close(1011, "Server configuration error: Missing API Key");
       return;
     }
 
-    const googleWsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BiDiGenerateContent?key=${apiKey}`;
+    // Extract query string from client request to preserve model etc
+    const clientUrl = new URL(req.url || '', `http://${req.headers.host}`);
+    const searchParams = clientUrl.searchParams;
+    
+    // Override/Inject the server-side API Key
+    searchParams.set('key', apiKey);
+
+    // Use v1beta as requested and correct casing to BidiGenerateContent
+    const googleWsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?${searchParams.toString()}`;
+
+    console.log(`GenAI Proxy: Connecting to Google with params: ${searchParams.toString().replace(apiKey, 'HIDDEN')}`);
+    
     const googleWs = new WS(googleWsUrl);
 
     googleWs.on('open', () => {
-      console.log('GenAI Live Proxy: Connected to Google');
+      console.log('GenAI Proxy: Connected to Google (v1beta) successfully');
     });
 
     googleWs.on('message', (data) => {
@@ -1492,20 +1508,22 @@ async function startServer() {
     });
 
     googleWs.on('close', (code, reason) => {
+      console.log(`GenAI Proxy: Google closed connection (${code}): ${reason}`);
       clientWs.close(code, reason.toString());
     });
 
     clientWs.on('close', (code, reason) => {
+      console.log(`GenAI Proxy: Client closed connection (${code}): ${reason}`);
       googleWs.close(code, reason.toString());
     });
 
     googleWs.on('error', (err) => {
-      console.error('Google Proxy Error:', err);
+      console.error('GenAI Proxy: Google Proxy Error:', err);
       clientWs.terminate();
     });
 
     clientWs.on('error', (err) => {
-      console.error('Client Proxy Error:', err);
+      console.error('GenAI Proxy: Client Proxy Error:', err);
       googleWs.terminate();
     });
   });

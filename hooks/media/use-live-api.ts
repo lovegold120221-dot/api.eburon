@@ -826,7 +826,68 @@ export function useLiveApi({
              uiState.useUI.getState().setIsGenerating(false);
          }
 
-         if (fc.name === 'create_html_document' || fc.name === 'create_json_file' || fc.name === 'generate_artifact' || fc.name === 'create_markdown_document' || fc.name === 'create_chart_spec' || fc.name === 'create_project_brief' || fc.name === 'create_checklist') {
+         if (fc.name === 'update_voice_persona') {
+           const { personaName, voice, language, systemPrompt } = fc.args as any;
+           const uiState = await import('../../lib/state');
+           const settings = uiState.useSettings.getState();
+           if (personaName) settings.setPersonaName(personaName);
+           if (voice) settings.setVoice(voice);
+           if (language) settings.setLanguage(language);
+           if (systemPrompt) settings.setSystemPrompt(systemPrompt);
+           responsePayload = { status: 'Persona updated successfully' };
+        }
+
+        if (fc.name === 'manage_function_tool') {
+           const { action, toolDefinition, toolName } = fc.args as any;
+           const uiState = await import('../../lib/state');
+           const toolStore = uiState.useTools.getState();
+           if (action === 'add') {
+               toolStore.addTool({ ...toolDefinition, isEnabled: true });
+               responsePayload = { status: `Tool ${toolDefinition.name} added successfully` };
+           } else if (action === 'remove') {
+               toolStore.removeTool(toolName);
+               responsePayload = { status: `Tool ${toolName} removed successfully` };
+           } else if (action === 'update') {
+               toolStore.updateTool(toolName, toolDefinition);
+               responsePayload = { status: `Tool ${toolName} updated successfully` };
+           }
+        }
+
+        if (fc.name === 'voice_command_optimizer') {
+           const { analysis_depth } = fc.args as any;
+           const uiState = await import('../../lib/state');
+           const logs = uiState.useLogStore.getState().turns;
+           // Simulate analysis
+           const recentUserTurns = logs.filter(t => t.role === 'user').slice(-10);
+           const suggestions = recentUserTurns.length > 0 
+              ? [`Suggested shortcut for "${recentUserTurns[0].text.substring(0, 20)}..." -> "Quick Task"`]
+              : ["No clear patterns identified yet. Try using more varied commands!"];
+           
+           responsePayload = { 
+              analysis: `Analyzed ${recentUserTurns.length} recent turns with ${analysis_depth} depth.`,
+              suggestions 
+           };
+        }
+
+        if (fc.name === 'test_voice_response') {
+           const { affect, text } = fc.args as any;
+           responsePayload = { status: `Testing vocal affect: ${affect}`, text };
+           // We can inject a system prompt to force Beatrice to perform the affect
+           const affectMap: Record<string, string> = {
+              'giggle': '[giggle]',
+              'sigh': '[sigh]',
+              'throat_clear': '[clears throat]',
+              'mumble': '[mumbles]',
+              'laugh': '[laughs]',
+              'gasp': '[gasp]',
+              'cough': '[cough]'
+           };
+           const vocalCue = affectMap[affect] || `[${affect}]`;
+           const testPrompt = `SYSTEM: TEST INCOMING. Please speak the following text with the specified vocal affect: "${vocalCue} ${text}"`;
+           client.send({ text: testPrompt });
+        }
+
+        if (fc.name === 'create_html_document' || fc.name === 'create_json_file' || fc.name === 'generate_artifact' || fc.name === 'create_markdown_document' || fc.name === 'create_chart_spec' || fc.name === 'create_project_brief' || fc.name === 'create_checklist') {
            const { title, type, content, language, data, items } = fc.args as any;
            
            try {

@@ -182,6 +182,9 @@
     .bg-forms { background: #ede7f6; }
     .bg-keep { background: #fff8e1; }
     .bg-picker { background: linear-gradient(135deg, #4285f4, #0f9d58); }
+    .bg-voicedev { background: linear-gradient(135deg, #6366f1, #4f46e5); }
+    .bg-toolbuilder { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .bg-voicecmds { background: linear-gradient(135deg, #10b981, #059669); }
 
     /* ---------------------------------------------------
        5. Chat Stream

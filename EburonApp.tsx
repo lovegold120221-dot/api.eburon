@@ -277,11 +277,27 @@ export default function EburonApp() {
 
   useEffect(() => {
     const initGapi = () => {
-      if ((window as any).gapi && typeof (window as any).gapi.load === 'function') {
-        (window as any).gapi.load('picker', {
-          callback: () => setIsPickerLoaded(true),
-          onerror: () => console.error('GAPI load failed'),
-          timeout: 5000
+      const g = (window as any).gapi;
+      if (g && typeof g.load === 'function') {
+        if ((window as any)._gapi_picker_loading) return;
+        (window as any)._gapi_picker_loading = true;
+
+        const onLoaded = () => {
+           setIsPickerLoaded(true);
+           (window as any)._gapi_picker_loading = false;
+        };
+
+        g.load('picker', {
+          callback: onLoaded,
+          onerror: (err: any) => {
+            console.error('GAPI load failed', err);
+            (window as any)._gapi_picker_loading = false;
+          },
+          timeout: 5000,
+          ontimeout: () => {
+            console.error('GAPI load timed out');
+            (window as any)._gapi_picker_loading = false;
+          }
         });
       }
     };
@@ -904,8 +920,12 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
         'invoice': "I need an invoice for Ariolas BV with line items, auto-calculated totals, and a download button.",
         'contacts': "List my Google Contacts using the list_contacts tool.",
         'firebase': "Create a Firebase-style dashboard with live data cards and activity feed.",
-        'docs': "I need a document for Ariolas BV. I can request contracts, NDAs, ToS, SoW, LOI, MOU, SLA, privacy policy, etc. Make it look professional with the company's name throughout and include a download button."
-      };
+        'docs': "I need a document for Ariolas BV. I can request contracts, NDAs, ToS, SoW, LOI, MOU, SLA, privacy policy, etc. Make it look professional with the company's name throughout and include a download button.",
+        'voicedev': "I want to update your voice persona or behavioral settings using the update_voice_persona tool. Let's review the current configuration.",
+        'toolbuilder': "I want to add or modify your function tools using the manage_function_tool tool. What new capabilities should we build?",
+        'voicecmds': "Analyze our recent conversations and suggest some optimized voice commands or shortcuts using the voice_command_optimizer tool."
+        };
+
       const prompt = prompts[toolId] || `Execute action: ${toolId}`;
       if (connected) {
          client.send({ text: prompt });
@@ -1041,6 +1061,9 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
             <div className="skill-chip" onClick={() => handleToolAction('forms')}><div className="skill-glyph bg-forms"><FileStack size={22} color="#7248b9" /></div><span className="skill-label">Forms</span></div>
             <div className="skill-chip" onClick={() => handleToolAction('keep')}><div className="skill-glyph bg-keep"><Paperclip size={22} color="#fbbc04" /></div><span className="skill-label">Keep</span></div>
             <div className="skill-chip" onClick={() => handleToolAction('meet')}><div className="skill-glyph bg-meet"><Video size={22} /></div><span className="skill-label">Meet</span></div>
+            <div className="skill-chip" onClick={() => handleToolAction('voicedev')}><div className="skill-glyph bg-voicedev"><Cpu size={22} /></div><span className="skill-label">Voice Dev</span></div>
+            <div className="skill-chip" onClick={() => handleToolAction('toolbuilder')}><div className="skill-glyph bg-toolbuilder"><Wrench size={22} /></div><span className="skill-label">Tool Builder</span></div>
+            <div className="skill-chip" onClick={() => handleToolAction('voicecmds')}><div className="skill-glyph bg-voicecmds"><Mic size={22} /></div><span className="skill-label">Voice Cmds</span></div>
             <div className="skill-chip" onClick={() => handleToolAction('whatsapp')}><div className="skill-glyph bg-whatsapp"><MessageSquare size={22} /></div><span className="skill-label">WhatsApp</span></div>
           </div>
         </div>

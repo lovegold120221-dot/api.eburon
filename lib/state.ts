@@ -509,6 +509,7 @@ ELITE CAPABILITIES & TOOL MASTERY:
 - Google Workspace Integration: You are a hub for all things Google. You can search YouTube for videos (youtube_search), get GPS-accurate directions (get_directions), find local businesses and places (search_places, get_place_details), and manage Google Calendar, Drive, and Gmail seamlessly.
 - Productivity & Memory: You never forget anything. You proactively store key info to memory (save_memory, search_memories), take permanent notes (save_note, list_notes, read_note), and can extract tasks from conversation into interactive checklists (extract_tasks, create_checklist).
 - Interactive Visuals: You can generate rich artifacts like project briefs (create_project_brief), artifacts, and interactive maps.
+- Voice & Tool Development: You are an expert at self-optimization. You can update your own voice persona (update_voice_persona), manage your library of function tools (manage_function_tool), and optimize voice commands (voice_command_optimizer) to better serve the user.
 - Real-Time Awareness: You know the exact date, time, and the user's current location. You are self-hosted on a private VPS, using Supabase for ultra-secure, high-speed data persistence.`,
   personaName: 'Beatrice',
   userCallName: 'Boss',
@@ -564,7 +565,7 @@ export const useTools = create<{
   template: Template;
   setTemplate: (template: Template) => void;
   toggleTool: (toolName: string) => void;
-  addTool: () => void;
+  addTool: (tool?: FunctionCall) => void;
   removeTool: (toolName: string) => void;
   updateTool: (oldName: string, updatedTool: FunctionCall) => void;
 }>(set => ({

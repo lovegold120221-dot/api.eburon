@@ -12,13 +12,17 @@ export const GooglePicker = () => {
 
   useEffect(() => {
     const initGapi = () => {
-      if ((window as any).gapi && typeof (window as any).gapi.load === 'function') {
-        (window as any).gapi.load('picker', {
-          callback: () => setPickerApiLoaded(true),
-          onerror: () => console.error('GAPI load failed'),
-          timeout: 5000,
-          ontimeout: () => console.error('GAPI load timed out')
-        });
+      const g = (window as any).gapi;
+      if (g && typeof g.load === 'function') {
+        if ((window as any)._gapi_loading) return;
+        (window as any)._gapi_loading = true;
+
+        const onLoaded = () => {
+           setPickerApiLoaded(true);
+           (window as any)._gapi_loading = false;
+        };
+
+        g.load('picker', onLoaded);
       }
     };
 
