@@ -1349,6 +1349,14 @@ async function startServer() {
   app.post('/api/whatsapp/sync', authenticateToken, async (req: any, res) => {
     res.json({ success: true, connected: waSessions.has(req.user.uid), synced: true });
   });
+
+  // Explicitly set headers for Cross-Origin-Opener-Policy to allow OAuth popups
+  app.use((req, res, next) => {
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+    next();
+  });
+
   if (!IS_PROD) {
     const vite = await createViteServer({
       server: { middlewareMode: true },

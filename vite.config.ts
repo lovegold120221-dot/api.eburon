@@ -18,6 +18,15 @@ export default defineConfig(({ mode }) => {
           'Cross-Origin-Embedder-Policy': 'unsafe-none'
         }
       },
+      preview: {
+        port: 3000,
+        host: '0.0.0.0',
+        allowedHosts: ['whatsapp.eburon.ai'],
+        headers: {
+          'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+          'Cross-Origin-Embedder-Policy': 'unsafe-none'
+        }
+      },
       plugins: [
         react(),
         tailwindcss()
