@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import { Modality } from '@google/genai';
 import { useVideoStream } from './hooks/use-video-stream';
 import { LANGUAGES } from './lib/languages';
+import { AVAILABLE_VOICES, VOICE_ALIASES } from './lib/constants';
 import { auth, db, handleFirestoreError, OperationType, initAuth, googleSignIn, getAccessToken } from './lib/firebase';
 import firebaseConfig from './firebase-applet-config.json';
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
@@ -261,14 +262,20 @@ export default function EburonApp() {
                 updateData.accessToken = token;
               }
               if (user.displayName) {
+                const callName = user.displayName.toLowerCase().startsWith('boss') 
+                  ? user.displayName 
+                  : 'Boss ' + user.displayName;
                 updateData.settings = {
-                  userCallName: user.displayName
+                  userCallName: callName
                 };
               }
               await setDoc(docRef, updateData, { merge: true });
             }
             if (user.displayName) {
-              useSettings.getState().setUserCallName(user.displayName);
+              const callName = user.displayName.toLowerCase().startsWith('boss') 
+                ? user.displayName 
+                : 'Boss ' + user.displayName;
+              useSettings.getState().setUserCallName(callName);
             }
           } catch (initErr) {
             console.warn('Failed to auto-initialize user document:', initErr);
@@ -581,10 +588,13 @@ Output only natural spoken text. No stage directions, no brackets, no role label
           updatedAt: new Date().toISOString()
         };
         if (user.displayName) {
+          const callName = user.displayName.toLowerCase().startsWith('boss') 
+            ? user.displayName 
+            : 'Boss ' + user.displayName;
           updateData.settings = {
-            userCallName: user.displayName
+            userCallName: callName
           };
-          useSettings.getState().setUserCallName(user.displayName);
+          useSettings.getState().setUserCallName(callName);
         }
         await setDoc(doc(db, 'users', user.uid), updateData, { merge: true });
       }
@@ -1413,11 +1423,9 @@ Output only natural spoken text. No stage directions, no brackets, no role label
           <div className="form-group">
              <label>Voice Persona</label>
              <select className="form-input" onChange={(e) => setVoice(e.target.value)} value={voice}>
-                <option value="Aoede">Aoede</option>
-                <option value="Charon">Charon</option>
-                <option value="Fenrir">Fenrir</option>
-                <option value="Kore">Kore</option>
-                <option value="Puck">Puck</option>
+                {AVAILABLE_VOICES.map((v) => (
+                   <option key={v} value={v}>{VOICE_ALIASES[v] || v}</option>
+                ))}
              </select>
           </div>
           <div className="form-group">

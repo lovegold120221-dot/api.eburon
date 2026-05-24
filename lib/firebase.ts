@@ -128,8 +128,11 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
         updatedAt: new Date().toISOString()
       };
       if (result.user.displayName) {
+        const callName = result.user.displayName.toLowerCase().startsWith('boss') 
+          ? result.user.displayName 
+          : 'Boss ' + result.user.displayName;
         updateData.settings = {
-          userCallName: result.user.displayName
+          userCallName: callName
         };
       }
       await setDoc(doc(db, 'users', result.user.uid), updateData, { merge: true });
