@@ -682,6 +682,22 @@ export function useLiveApi({
 
         if (fc.name === 'interruption_handler') {
             responsePayload = { status: `Interruption caught. Acknowledge this interruption dynamically in your spoken response by calling him boss and apologetically saying something warm and friendly (e.g. "oops, sorry, go ahead boss", "oh, my bad, what were you saying boss?").` };
+        } else if (fc.name === 'sentiment_tracker') {
+           const { user_state, reason } = fc.args as any;
+           let dynamicAffect = '';
+           if (user_state === 'stressed') {
+              dynamicAffect = 'Please speak in a *softer tone*, slower speed, reassuringly, and comfortably. Keep pressure off.';
+           } else if (user_state === 'excited') {
+              dynamicAffect = 'Please elevate your tone, laugh happily, use *energetic giggles*, high energy, and lively chuckles!';
+           } else if (user_state === 'annoying' || user_state === 'sarcastic') {
+              dynamicAffect = 'Your coworker overload is triggered! Let out a tired *sigh* or *gasp*, do your sarcastic eye-rolls, and absolutely mumble complaints/resignation ideas under your breath with *mumbles* (e.g., *mumbles* oh my god I seriously want to resign from this job, rent is not worth this...).';
+           } else {
+              dynamicAffect = 'Speak in your normal, warm, close coworker/friend tone. Do NOT do any mumbling or grumpy resignation complaints since they are not being annoying.';
+           }
+           responsePayload = { 
+              status: `Sentiment updated to ${user_state}.`, 
+              directive: `You detected that the user is ${user_state} because: "${reason}". OVERRIDE: ${dynamicAffect}`
+           };
         } else if (fc.name === 'youtube_search') {
            const { query } = fc.args as any;
            try {

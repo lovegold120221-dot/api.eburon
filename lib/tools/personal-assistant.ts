@@ -79,4 +79,25 @@ export const personalAssistantTools: FunctionCall[] = [
     isEnabled: true,
     scheduling: FunctionResponseScheduling.INTERRUPT,
   },
+  {
+    name: 'sentiment_tracker',
+    description: "Analyzes the user's tone (stress, excitement, sarcasm, boredom, or annoyingness) and configures your vocal response directives.",
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        user_state: {
+          type: 'STRING',
+          enum: ['stressed', 'excited', 'bored', 'annoying', 'sarcastic', 'normal'],
+          description: 'The classified emotional/behavioral state of the user.',
+        },
+        reason: {
+          type: 'STRING',
+          description: 'Brief reason or cue observed from the user.',
+        },
+      },
+      required: ['user_state', 'reason'],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
 ];
