@@ -12,6 +12,10 @@ dotenv.config();
 const IS_PROD = process.env.NODE_ENV === 'production';
 const DIST_PATH = path.join(process.cwd(), 'dist');
 
+import QRCode from 'qrcode';
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import Pino from 'pino';
+
 // Initialize Firebase Admin lazily
 let adminInitialized = false;
 function getFirebaseAdmin() {
@@ -56,6 +60,58 @@ function getFirestoreDb() {
     }
   }
   return firestoreDb;
+}
+
+const waSessions = new Map<string, any>();
+const waQRs = new Map<string, string>();
+const waStates = new Map<string, any>(); 
+
+async function startBaileysSession(userId: string) {
+  const { state, saveCreds } = await useMultiFileAuthState(`/tmp/baileys_auth_${userId}`);
+  const { version } = await fetchLatestBaileysVersion();
+  
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: false,
+    logger: Pino({ level: 'silent' }) as any
+  });
+
+  waSessions.set(userId, sock);
+
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect, qr } = update;
+    
+    if (qr) {
+      QRCode.toDataURL(qr).then((url: string) => {
+        waQRs.set(userId, url);
+      });
+    }
+
+    if (connection === 'close') {
+      const shouldReconnect = (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut;
+      if (shouldReconnect) {
+        startBaileysSession(userId);
+      } else {
+        waSessions.delete(userId);
+        waQRs.delete(userId);
+        waStates.delete(userId);
+        if (fs.existsSync(`/tmp/baileys_auth_${userId}`)) {
+          fs.rmSync(`/tmp/baileys_auth_${userId}`, { recursive: true, force: true });
+        }
+      }
+    } else if (connection === 'open') {
+      waQRs.delete(userId);
+      waStates.set(userId, {
+        phone: sock.user?.id?.split(':')[0] || 'Unknown Phone',
+        name: sock.user?.name || 'WhatsApp User'
+      });
+    }
+  });
+
+  return sock;
 }
 
 async function startServer() {
@@ -204,73 +260,77 @@ async function startServer() {
     }
   });
 
-  // WhatsApp Proxy (Meta for Developers Cloud API)
-  app.get('/api/whatsapp/connect', async (req, res) => {
-    const whatsappToken = process.env.WHATSAPP_ACCESS_TOKEN;
-    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  // WhatsApp Baileys API
+  app.get('/api/whatsapp/status', authenticateToken, async (req: any, res) => {
+    const userId = req.user.uid;
+    const isConnected = waSessions.has(userId) && waStates.has(userId);
+    const hasQR = waQRs.has(userId);
     
-    res.json({
-      status: "ready",
-      provider: "Meta for Developers Cloud API",
-      phoneNumberId: phoneNumberId || null,
-      configured: !!whatsappToken && !!phoneNumberId,
-      instructions: "To finalize production activation: 1. Create your Business application on developers.facebook.com. 2. Enable physical WhatsApp Product. 3. Retrieve your permanent access token and Phone Number ID, setting them securely in your .env or Environment Variables. 4. Complete the official phone linking."
-    });
+    if (isConnected) {
+      res.json({ connected: true, state: waStates.get(userId), deviceId: userId });
+    } else if (hasQR) {
+      res.json({ connected: false, qrUrl: waQRs.get(userId), deviceId: userId });
+    } else {
+      res.json({ connected: false, deviceId: userId });
+    }
+  });
+
+  app.post('/api/whatsapp/connect', authenticateToken, async (req: any, res) => {
+    const userId = req.user.uid;
+    if (!waSessions.has(userId)) {
+      await startBaileysSession(userId);
+    }
+    res.json({ success: true });
+  });
+
+  app.post('/api/whatsapp/disconnect', authenticateToken, async (req: any, res) => {
+    const userId = req.user.uid;
+    if (waSessions.has(userId)) {
+      const sock = waSessions.get(userId);
+      await sock?.logout();
+    }
+    waSessions.delete(userId);
+    waQRs.delete(userId);
+    waStates.delete(userId);
+    if (fs.existsSync(`/tmp/baileys_auth_${userId}`)) {
+      fs.rmSync(`/tmp/baileys_auth_${userId}`, { recursive: true, force: true });
+    }
+    res.json({ success: true });
   });
 
   app.post('/api/whatsapp/send', authenticateToken, async (req: any, res) => {
-    const whatsappToken = process.env.WHATSAPP_ACCESS_TOKEN;
-    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-    
+    const userId = req.user.uid;
     const phone = req.body.phone;
     const text = req.body.text;
 
-    if (!whatsappToken || !phoneNumberId) {
+    const sock = waSessions.get(userId);
+    if (!sock || !waStates.has(userId)) {
       return res.status(400).json({
-        error: 'WhatsApp integration is not fully configured on the server.',
-        message: 'Please define the WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID environment variables in your server configuration to enable production-level WhatsApp messaging.'
+        error: 'WhatsApp is not connected.',
+        message: 'Please connect WhatsApp using the QR code first.'
       });
     }
 
     try {
-      // Standard Graph API fetch for Meta Cloud WhatsApp API
-      const response = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${whatsappToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          to: phone,
-          type: "text",
-          text: {
-            preview_url: false,
-            body: text
-          }
-        })
-      });
-
-      const result = await response.json();
+      const jid = phone.includes('@s.whatsapp.net') ? phone : `${phone.replace(/\D/g, '')}@s.whatsapp.net`;
+      const result = await sock.sendMessage(jid, { text });
 
       // Log to Firestore
       try {
         const firestore = getFirestoreDb();
         await firestore.collection('users').doc(req.user.uid).collection('whatsapp_messages').add({
-          phone,
+          phone: jid,
           text,
           direction: 'sent',
-          status: result.error ? 'failed' : 'sent',
-          messageId: result.messages?.[0]?.id || null,
-          error: result.error || null,
+          status: 'sent',
+          messageId: result?.key?.id || null,
           timestamp: new Date().toISOString()
         });
       } catch (logErr) {
         console.warn('Failed to log WhatsApp message to Firestore:', logErr);
       }
 
-      res.json(result);
+      res.json({ success: true, result });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
