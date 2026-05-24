@@ -144,7 +144,10 @@ export default function EburonApp() {
         'Authorization': `Bearer ${token}`
       }
     })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error("HTTP error " + res.status);
+        return res.json();
+      })
       .then(data => {
         setWhatsappInfo(data);
         setWhatsappLoading(false);
@@ -166,7 +169,10 @@ export default function EburonApp() {
           fetch('/api/whatsapp/status', {
              headers: { 'Authorization': `Bearer ${token}` }
           })
-          .then(res => res.json())
+          .then(res => {
+             if (!res.ok) throw new Error("HTTP error");
+             return res.json();
+          })
           .then(data => setWhatsappInfo(data))
           .catch(() => {});
         }
@@ -182,7 +188,10 @@ export default function EburonApp() {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
     })
-    .then(res => res.json())
+    .then(res => {
+        if (!res.ok) throw new Error("HTTP error");
+        return res.json();
+    })
     .then(() => fetchWhatsappStatus())
     .catch(() => setWhatsappLoading(false));
   };
@@ -194,7 +203,10 @@ export default function EburonApp() {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
     })
-    .then(res => res.json())
+    .then(res => {
+        if (!res.ok) throw new Error("HTTP error");
+        return res.json();
+    })
     .then(() => fetchWhatsappStatus())
     .catch(() => setWhatsappLoading(false));
   };
