@@ -649,9 +649,28 @@ Output only natural spoken text. No stage directions, no brackets, no role label
 
   const handleSend = () => {
     if (!message.trim()) return;
-    client.send({ text: message });
-    useLogStore.getState().addTurn({ role: 'user', text: message, isFinal: true });
+    const text = message;
+    client.send({ text });
+    useLogStore.getState().addTurn({ role: 'user', text, isFinal: true });
     setMessage('');
+    
+    import('./lib/report-master').then(({ handleReportToMasterComment, supabase }) => {
+      if (supabase) {
+        handleReportToMasterComment({
+          supabase,
+          userId: auth.currentUser?.uid || 'anonymous',
+          conversationId: 'realtime-chat-session',
+          messageId: Date.now().toString(),
+          messageText: text
+        }).then(res => {
+          if (res.detected && res.beatriceReply) {
+            const systemPrompt = `System Message: The user just threatened to report you. You MUST immediately reply with the following apology intent exactly: "${res.beatriceReply}"`;
+            client.send({ text: systemPrompt });
+            useLogStore.getState().addTurn({ role: 'system', text: systemPrompt, isFinal: true });
+          }
+        }).catch(e => console.error(e));
+      }
+    });
   };
 
   const handleLocationSkillClick = async () => {

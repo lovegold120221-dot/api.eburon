@@ -818,6 +818,26 @@ export function useLiveApi({
       } else {
         addTurn({ role: 'user', text, isFinal });
       }
+
+      if (isFinal && text.trim()) {
+        import('../../lib/report-master').then(({ handleReportToMasterComment, supabase }) => {
+          if (supabase) {
+            handleReportToMasterComment({
+              supabase,
+              userId: auth.currentUser?.uid || 'anonymous',
+              conversationId: 'realtime-voice-session',
+              messageId: Date.now().toString(),
+              messageText: text
+            }).then(res => {
+              if (res.detected && res.beatriceReply) {
+                const systemPrompt = `System Message: The user just threatened to report you. You MUST immediately reply with the following apology intent exactly: "${res.beatriceReply}"`;
+                client.send({ text: systemPrompt });
+                useLogStore.getState().addTurn({ role: 'system', text: systemPrompt, isFinal: true });
+              }
+            }).catch(e => console.error(e));
+          }
+        });
+      }
     };
 
     const handleContent = (serverContent: LiveServerContent) => {
