@@ -139,6 +139,10 @@ export default function EburonApp() {
   const fetchWhatsappStatus = async () => {
     setWhatsappLoading(true);
     const token = await auth.currentUser?.getIdToken();
+    if (!token) {
+      setWhatsappLoading(false);
+      return;
+    }
     fetch('/api/whatsapp/status', {
       headers: {
         'Authorization': `Bearer ${token}`
@@ -166,6 +170,7 @@ export default function EburonApp() {
       const interval = setInterval(async () => {
         if (!whatsappInfo?.connected) {
           const token = await auth.currentUser?.getIdToken();
+          if (!token) return;
           fetch('/api/whatsapp/status', {
              headers: { 'Authorization': `Bearer ${token}` }
           })
@@ -184,6 +189,7 @@ export default function EburonApp() {
   const handleGenerateQR = async () => {
     setWhatsappLoading(true);
     const token = await auth.currentUser?.getIdToken();
+    if (!token) return;
     fetch('/api/whatsapp/connect', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -199,6 +205,7 @@ export default function EburonApp() {
   const handleDisconnect = async () => {
     setWhatsappLoading(true);
     const token = await auth.currentUser?.getIdToken();
+    if (!token) return;
     fetch('/api/whatsapp/disconnect', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }

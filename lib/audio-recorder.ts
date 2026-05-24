@@ -22,7 +22,7 @@ import { audioContext } from './utils';
 import AudioRecordingWorklet from './worklets/audio-processing';
 import VolMeterWorket from './worklets/vol-meter';
 
-import { createWorketFromSrc } from './audioworklet-registry';
+import { createWorketFromSrc, registeredWorklets } from './audioworklet-registry';
 import EventEmitter from 'eventemitter3';
 
 function arrayBufferToBase64(buffer: ArrayBuffer) {
@@ -79,7 +79,17 @@ export class AudioRecorder {
         const workletName = 'audio-recorder-worklet';
         const src = createWorketFromSrc(workletName, AudioRecordingWorklet);
 
-        await this.audioContext.audioWorklet.addModule(src);
+        let workletsRecord = registeredWorklets.get(this.audioContext);
+        if (!workletsRecord) {
+          workletsRecord = {};
+          registeredWorklets.set(this.audioContext, workletsRecord);
+        }
+
+        if (!workletsRecord[workletName]) {
+          await this.audioContext.audioWorklet.addModule(src);
+          workletsRecord[workletName] = { handlers: [] };
+        }
+        
         this.recordingWorklet = new AudioWorkletNode(
           this.audioContext,
           workletName
@@ -100,9 +110,12 @@ export class AudioRecorder {
 
         // vu meter worklet
         const vuWorkletName = 'vu-meter';
-        await this.audioContext.audioWorklet.addModule(
-          createWorketFromSrc(vuWorkletName, VolMeterWorket)
-        );
+        if (!workletsRecord[vuWorkletName]) {
+          await this.audioContext.audioWorklet.addModule(
+            createWorketFromSrc(vuWorkletName, VolMeterWorket)
+          );
+          workletsRecord[vuWorkletName] = { handlers: [] };
+        }
         this.vuWorklet = new AudioWorkletNode(this.audioContext, vuWorkletName);
         this.vuWorklet.port.onmessage = (ev: MessageEvent) => {
           // FIX: Changed this.emit to this.emitter.emit
