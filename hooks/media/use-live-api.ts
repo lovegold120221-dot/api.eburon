@@ -458,6 +458,23 @@ export function useLiveApi({
             }
         }
 
+        if (fc.name === 'search_whatsapp_contacts') {
+            const { query } = fc.args as any;
+            try {
+                responsePayload = await api.getWhatsappContacts(query);
+            } catch (e: any) {
+                responsePayload = { error: e.message };
+            }
+        }
+
+        if (fc.name === 'read_whatsapp_chats') {
+            try {
+                responsePayload = await api.getWhatsappChats();
+            } catch (e: any) {
+                responsePayload = { error: e.message };
+            }
+        }
+
         if (fc.name === 'connect_whatsapp') {
             try {
                 responsePayload = await api.connectWhatsapp();

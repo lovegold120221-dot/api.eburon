@@ -31,5 +31,31 @@ export const whatsappTools: FunctionCall[] = [
     },
     isEnabled: true,
     scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'search_whatsapp_contacts',
+    description: 'Retrieves the list of contacts synced from the user\'s connected WhatsApp account. Use this to lookup the phone number of a friend or contact by name.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        query: {
+          type: 'STRING',
+          description: 'Optional query string to search for a contact by name or number.'
+        }
+      },
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'read_whatsapp_chats',
+    description: 'Retrieves the recent chats and their latest messages from the user\'s connected WhatsApp account.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {},
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
   }
 ];
+

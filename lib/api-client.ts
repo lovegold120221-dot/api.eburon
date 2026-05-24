@@ -97,3 +97,14 @@ export const sendWhatsappMessage = async (phone: string, text: string) => {
   const token = await getToken();
   return apiClient.post('/api/whatsapp/send', { phone, text }, token);
 };
+
+export const getWhatsappContacts = async (query?: string) => {
+  const token = await getToken();
+  const url = query ? `/api/whatsapp/contacts?q=${encodeURIComponent(query)}` : '/api/whatsapp/contacts';
+  return apiClient.get(url, token);
+};
+
+export const getWhatsappChats = async () => {
+  const token = await getToken();
+  return apiClient.get('/api/whatsapp/chats', token);
+};

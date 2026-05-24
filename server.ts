@@ -87,6 +87,8 @@ function getFirestoreDb() {
 const waSessions = new Map<string, any>();
 const waQRs = new Map<string, string>();
 const waStates = new Map<string, any>(); 
+const waContacts = new Map<string, Map<string, any>>();
+const waMessages = new Map<string, Map<string, any[]>>();
 
 const getAuthPath = (userId: string) => path.join(os.tmpdir(), `baileys_auth_${userId}`);
 
@@ -106,7 +108,37 @@ async function startBaileysSession(userId: string) {
 
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('connection.update', (update) => {
+  sock.ev.on('contacts.upsert', (contacts: any[]) => {
+    let userContacts = waContacts.get(userId);
+    if (!userContacts) {
+      userContacts = new Map();
+      waContacts.set(userId, userContacts);
+    }
+    for (const contact of contacts) {
+      userContacts.set(contact.id, contact);
+    }
+  });
+
+  sock.ev.on('messages.upsert', (m: any) => {
+    let userMessages = waMessages.get(userId);
+    if (!userMessages) {
+      userMessages = new Map();
+      waMessages.set(userId, userMessages);
+    }
+    for (const msg of m.messages) {
+      const chatId = msg.key.remoteJid;
+      if (!chatId) continue;
+      let chatMsgs = userMessages.get(chatId);
+      if (!chatMsgs) {
+        chatMsgs = [];
+        userMessages.set(chatId, chatMsgs);
+      }
+      chatMsgs.push(msg);
+      if (chatMsgs.length > 50) userMessages.set(chatId, chatMsgs.slice(-50));
+    }
+  });
+
+  sock.ev.on('connection.update', (update: any) => {
     const { connection, lastDisconnect, qr } = update;
     
     if (qr) {
@@ -142,7 +174,7 @@ async function startBaileysSession(userId: string) {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = parseInt(process.env.PORT as string) || 3000;
 
   app.use((req, res, next) => {
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
@@ -334,6 +366,41 @@ async function startServer() {
       fs.rmSync(authPath, { recursive: true, force: true });
     }
     res.json({ success: true });
+  });
+
+  app.get('/api/whatsapp/contacts', authenticateToken, async (req: any, res) => {
+    const userId = req.user.uid;
+    const q = (req.query.q || '').toString().toLowerCase();
+    const userContacts = waContacts.get(userId);
+    if (!userContacts) {
+      return res.json({ contacts: [] });
+    }
+    let contactsArray = Array.from(userContacts.values());
+    if (q) {
+      contactsArray = contactsArray.filter(c => 
+        (c.name && c.name.toLowerCase().includes(q)) || 
+        (c.notify && c.notify.toLowerCase().includes(q)) ||
+        (c.id && c.id.includes(q))
+      );
+    }
+    res.json({ contacts: contactsArray.slice(0, 50) }); // Limit to 50 for token limits
+  });
+
+  app.get('/api/whatsapp/chats', authenticateToken, async (req: any, res) => {
+    const userId = req.user.uid;
+    const userMessages = waMessages.get(userId);
+    if (!userMessages) {
+      return res.json({ chats: [] });
+    }
+    const chatsArray = Array.from(userMessages.keys()).map(jid => {
+      const msgs = userMessages.get(jid) || [];
+      const lastMessage = msgs[msgs.length - 1];
+      return {
+        jid,
+        lastMessage
+      };
+    });
+    res.json({ chats: chatsArray });
   });
 
   app.post('/api/whatsapp/send', authenticateToken, async (req: any, res) => {
