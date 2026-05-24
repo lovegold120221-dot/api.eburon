@@ -1,7 +1,3 @@
-<div align="center">
-<img width="1200" height="475" alt="Eburon AI Banner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
-
 # Eburon AI: The Elite Multimodal Executive Assistant
 
 Welcome to **Eburon AI**, a high-performance, self-hosted executive assistant powered by Gemini 2.0 Flash (v1beta). Eburon AI (Beatrice) is designed for absolute compliance, deep context awareness, and seamless integration with your professional life via WhatsApp and Google Workspace.
