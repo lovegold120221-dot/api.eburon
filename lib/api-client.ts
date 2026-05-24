@@ -89,8 +89,8 @@ export const saveConversationTurn = async (role: string, content: string, sessio
 };
 
 export const connectWhatsapp = async () => {
-  const response = await fetch('/api/whatsapp/connect'); // hypothetical endpoint
-  return response.json();
+  const token = await getToken();
+  return apiClient.post('/api/whatsapp/connect', {}, token);
 };
 
 export const sendWhatsappMessage = async (phone: string, text: string) => {
