@@ -9,7 +9,7 @@ This guide provides comprehensive instructions for deploying **Eburon AI (Beatri
 - **VPS:** Minimum 2GB RAM, 2 vCPUs recommended.
 - **Domain:** A valid domain name with SSL (e.g., `eburon.ai`).
 - **Services:**
-  - [Supabase](https://supabase.com/) (Managed or Self-Hosted).
+  - **Local Supabase** (Self-Hosted via Docker).
   - [Firebase Project](https://console.firebase.google.com/) (Authentication).
   - [Meta for Developers](https://developers.facebook.com/) (WhatsApp Cloud API).
   - [Google Cloud Console](https://console.cloud.google.com/) (Gemini & GWS APIs).
@@ -25,8 +25,16 @@ cd /root/eburon-ai
 npm install
 ```
 
-### 2.2. Configure Environment Variables
-Create a `.env` file in the root directory. Use `.env.example` as a template.
+### 2.2. Supabase Local Setup (Docker)
+Ensure Docker and Docker Compose are installed. Eburon AI expects Supabase to be running locally.
+```bash
+# Example setup for local supabase docker
+cd /root/supabase/docker
+docker compose up -d
+```
+
+### 2.3. Configure Environment Variables
+Create a `.env` file in the root directory.
 
 ```env
 # Google & AI
@@ -34,10 +42,11 @@ GEMINI_API_KEY=AIzaSy...
 GOOGLE_API_KEY=AIzaSy...
 GOOGLE_CLIENT_ID=8117...
 
-# Supabase
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_PUBLISHABLE_KEY=eyJhbGc...
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
+# Local Supabase (Internal VPS connection)
+SUPABASE_URL=http://localhost:8000
+SUPABASE_PUBLISHABLE_KEY=your_local_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_local_service_key
+```
 
 # WhatsApp (Meta)
 WHATSAPP_PHONE_NUMBER_ID=114...
