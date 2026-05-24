@@ -680,7 +680,9 @@ export function useLiveApi({
            responsePayload = { status: `Opened ${url} in a new tab` };
         }
 
-        if (fc.name === 'youtube_search') {
+        if (fc.name === 'interruption_handler') {
+            responsePayload = { status: `Interruption caught. Acknowledge this interruption dynamically in your spoken response by calling him boss and apologetically saying something warm and friendly (e.g. "oops, sorry, go ahead boss", "oh, my bad, what were you saying boss?").` };
+        } else if (fc.name === 'youtube_search') {
            const { query } = fc.args as any;
            try {
               const res = await fetch(`/api/youtube?q=${encodeURIComponent(query)}`);
