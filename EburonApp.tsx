@@ -706,14 +706,36 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
     }
   };
 
+  const [authLanguage, setAuthLanguage] = useState('English');
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
     try {
+      let user;
       if (isSignupMode) {
-        await createUserWithEmailAndPassword(auth, email, password);
+        const result = await createUserWithEmailAndPassword(auth, email, password);
+        user = result.user;
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        const result = await signInWithEmailAndPassword(auth, email, password);
+        user = result.user;
+      }
+
+      if (user) {
+        const idToken = await user.getIdToken();
+        await fetch('/api/user/sync', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email: user.email,
+            displayName: name || user.displayName,
+            language: authLanguage
+          })
+        });
+        setIsAuthOpen(false);
       }
     } catch (err: any) {
       setAuthError(err.message);
@@ -723,7 +745,7 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
   const handleGoogleLogin = async () => {
     setAuthError('');
     try {
-      await googleSignIn();
+      await googleSignIn(authLanguage);
       setIsAuthOpen(false);
     } catch (err: any) {
       setAuthError(err.message);
@@ -2362,6 +2384,20 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
             )}
             <button type="submit" className="auth-submit-btn">{isSignupMode ? 'Sign up' : 'Sign in'}</button>
           </form>
+
+          <div className="form-group" style={{ marginTop: '16px' }}>
+             <label style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '6px', display: 'block' }}>Default Language</label>
+             <select 
+               className="form-input" 
+               value={authLanguage} 
+               onChange={(e) => setAuthLanguage(e.target.value)}
+               style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', color: '#fff' }}
+             >
+                {LANGUAGES.map((lang) => (
+                   <option key={lang} value={lang}>{lang}</option>
+                ))}
+             </select>
+          </div>
 
           <div className="auth-divider"><span>or</span></div>
 

@@ -102,12 +102,15 @@ function logErrorWithReference(error: any, context: string): string {
 async function recoverSessions() {
   if (!fs.existsSync(SESSION_DIR)) return;
   const files = fs.readdirSync(SESSION_DIR);
+  const supabase = getSupabase();
   for (const file of files) {
     if (file.startsWith('auth_')) {
       const userId = file.replace('auth_', '');
       console.log(`Recovering WhatsApp session for user: ${userId}`);
       try {
-        await startBaileysSession(userId);
+        // Fetch email from Supabase for robust reference
+        const { data: userData } = await supabase.from('users').select('email').eq('firebase_uid', userId).maybeSingle();
+        await startBaileysSession(userId, userData?.email);
       } catch (e) {
         console.error(`Failed to recover session for ${userId}:`, e);
       }
@@ -167,7 +170,7 @@ IMPORTANT: Keep your response short and sweet (1-2 sentences). You are chatting 
   }
 }
 
-async function startBaileysSession(userId: string) {
+async function startBaileysSession(userId: string, email?: string) {
   const authPath = getAuthPath(userId);
   const { state, saveCreds } = await useMultiFileAuthState(authPath);
   const { version } = await fetchLatestBaileysVersion();
@@ -183,14 +186,33 @@ async function startBaileysSession(userId: string) {
 
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('contacts.upsert', (contacts: any[]) => {
+  sock.ev.on('contacts.upsert', async (contacts: any[]) => {
     let userContacts = waContacts.get(userId);
     if (!userContacts) {
       userContacts = new Map();
       waContacts.set(userId, userContacts);
     }
+    
+    const supabase = getSupabase();
+    // Get internal user ID
+    const { data: userData } = await supabase.from('users').select('id').eq('firebase_uid', userId).maybeSingle();
+    
     for (const contact of contacts) {
       userContacts.set(contact.id, contact);
+      
+      // Sync to Supabase
+      if (userData) {
+        try {
+          await supabase.from('whatsapp_contacts').upsert({
+            user_id: userData.id,
+            firebase_uid: userId,
+            jid: contact.id,
+            name: contact.name || null,
+            notify: contact.notify || null,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'firebase_uid,jid' });
+        } catch (e) {}
+      }
     }
   });
 
@@ -201,6 +223,10 @@ async function startBaileysSession(userId: string) {
       userMessages = new Map();
       waMessages.set(userId, userMessages);
     }
+    
+    const supabase = getSupabase();
+    const { data: userData } = await supabase.from('users').select('id').eq('firebase_uid', userId).maybeSingle();
+
     for (const msg of m.messages) {
       const chatId = msg.key.remoteJid;
       if (chatId) {
@@ -211,6 +237,21 @@ async function startBaileysSession(userId: string) {
         }
         chatMsgs.push(msg);
         if (chatMsgs.length > 50) userMessages.set(chatId, chatMsgs.slice(-50));
+
+        // Sync Chat metadata to Supabase
+        if (userData) {
+           const messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "[Media]";
+           try {
+             await supabase.from('whatsapp_chats').upsert({
+                user_id: userData.id,
+                firebase_uid: userId,
+                jid: chatId,
+                last_message_text: messageText,
+                last_message_timestamp: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+             }, { onConflict: 'firebase_uid,jid' });
+           } catch (e) {}
+        }
       }
     }
 
@@ -243,9 +284,8 @@ async function startBaileysSession(userId: string) {
         try {
           const supabase = getSupabase();
           
-          // Ensure user exists first before adding related records. We can do an upsert or assume auth endpoint did it.
-          // Let's do a quick upsert just to be safe.
-          await supabase.from('users').upsert({ firebase_uid: userId }, { onConflict: 'firebase_uid', ignoreDuplicates: true });
+          // Ensure user exists first before adding related records
+          await supabase.from('users').upsert({ firebase_uid: userId, email: email || null }, { onConflict: 'firebase_uid', ignoreDuplicates: true });
 
           const { data: userData } = await supabase.from('users').select('id').eq('firebase_uid', userId).single();
 
@@ -267,10 +307,6 @@ async function startBaileysSession(userId: string) {
           console.warn('Failed to log incoming WhatsApp message:', logErr);
         }
 
-        /**
-         * Send messageText to Beatrice's AI/chat backend here.
-         * Then send Beatrice's reply back to the same remoteJid.
-         */
         const beatriceReply = await generateBeatriceReply({
            userId,
            message: messageText,
@@ -314,7 +350,7 @@ async function startBaileysSession(userId: string) {
     if (connection === 'close') {
       const shouldReconnect = (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut;
       if (shouldReconnect) {
-        startBaileysSession(userId);
+        startBaileysSession(userId, email);
       } else {
         waSessions.delete(userId);
         waQRs.delete(userId);
@@ -334,11 +370,12 @@ async function startBaileysSession(userId: string) {
         name
       });
 
-      // Link WhatsApp to current user in Supabase
+      // Link WhatsApp to current user in Supabase with UID and Email reference
       try {
         const supabase = getSupabase();
         supabase.from('users').upsert({
           firebase_uid: userId,
+          email: email || null,
           whatsapp_linked: true,
           whatsapp_phone: phone,
           whatsapp_name: name,
@@ -348,7 +385,7 @@ async function startBaileysSession(userId: string) {
           if (error) {
              console.warn(`Failed to link WhatsApp to user ${userId} in Supabase:`, error);
           } else {
-             console.log(`Linked WhatsApp ${phone} to user ${userId}`);
+             console.log(`Linked WhatsApp ${phone} to user ${userId} (${email || 'No Email'})`);
           }
         });
       } catch (err) {
@@ -403,12 +440,27 @@ async function startServer() {
   app.post('/api/user/sync', authenticateToken, async (req: any, res) => {
     try {
       const supabase = getSupabase();
-      const { email, displayName, photoURL } = req.body;
+      const { email, displayName, photoURL, language } = req.body;
+      
+      // Check if user already has a user_call_name
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('user_call_name, language')
+        .eq('firebase_uid', req.user.uid)
+        .maybeSingle();
+
+      const firstName = displayName ? displayName.split(' ')[0] : 'Boss';
+      const defaultCallName = firstName.toLowerCase().startsWith('boss') ? firstName : `Boss ${firstName}`;
+
       const { error } = await supabase.from('users').upsert({
         firebase_uid: req.user.uid,
         email: email,
         display_name: displayName,
         photo_url: photoURL,
+        // Only set user_call_name if it doesn't exist
+        user_call_name: existingUser?.user_call_name || defaultCallName,
+        // Set language if provided and not already set, or if explicitly requested to update
+        language: language || existingUser?.language || 'English',
         updated_at: new Date().toISOString()
       }, { onConflict: 'firebase_uid' });
       
@@ -664,13 +716,14 @@ async function startServer() {
   app.post('/api/whatsapp/connect', authenticateToken, async (req: any, res) => {
     try {
       const userId = req.user.uid;
+      const email = req.user.email;
       if (!waSessions.has(userId)) {
-        await startBaileysSession(userId);
+        await startBaileysSession(userId, email);
       }
       res.json({ success: true });
     } catch (e: any) {
-      console.error('Baileys start error', e);
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'POST /api/whatsapp/connect');
+      res.status(500).json({ error: `Eburon AI server is redeploying. Reference: ${ref}` });
     }
   });
 
@@ -884,6 +937,16 @@ async function startServer() {
                 provider: 'baileys',
                 raw_message_id: result?.key?.id || null
               });
+
+            // Sync to WhatsApp Chats
+            await supabase.from('whatsapp_chats').upsert({
+                user_id: userData.id,
+                firebase_uid: userId,
+                jid: jid,
+                last_message_text: text,
+                last_message_timestamp: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'firebase_uid,jid' });
           }
         } catch (logErr) {
           console.warn('Failed to log WhatsApp message to Supabase:', logErr);
@@ -1111,6 +1174,28 @@ async function startServer() {
                 metadata: metadata
               });
 
+              // Sync to WhatsApp Chats
+              await supabase.from('whatsapp_chats').upsert({
+                user_id: userData.id,
+                firebase_uid: userData.firebase_uid,
+                jid: from,
+                last_message_text: messageText,
+                last_message_timestamp: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'firebase_uid,jid' });
+
+              // Sync to WhatsApp Contacts
+              const contactName = body.entry[0].changes[0].value.contacts?.[0]?.profile?.name;
+              if (contactName) {
+                await supabase.from('whatsapp_contacts').upsert({
+                  user_id: userData.id,
+                  firebase_uid: userData.firebase_uid,
+                  jid: from,
+                  name: contactName,
+                  updated_at: new Date().toISOString()
+                }, { onConflict: 'firebase_uid,jid' });
+              }
+
               // Trigger AI response (if applicable, e.g. text/media)
               const beatriceReply = await generateBeatriceReply({
                 userId: userData.firebase_uid, 
@@ -1138,27 +1223,38 @@ async function startServer() {
                     });
 
                     const replyData: any = await replyRes.json();
-                    await supabase.from('whatsapp_messages').insert({
-                      user_id: userData.id,
-                      firebase_uid: userData.firebase_uid,
-                      phone: from,
-                      text: beatriceReply,
-                      direction: 'sent',
-                      status: replyRes.ok ? 'sent' : 'failed',
-                      provider: 'meta_cloud_api',
-                      raw_message_id: replyData.messages?.[0]?.id || null
-                    });
-                 }
-              }
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Meta Webhook processing error:", err);
-    }
-  });
+                    // 4. Log Sent Message
+                       await supabase.from('whatsapp_messages').insert({
+                         user_id: userData.id,
+                         firebase_uid: userId,
+                         phone: from,
+                         text: beatriceReply,
+                         direction: 'sent',
+                         status: replyRes.ok ? 'sent' : 'failed',
+                         provider: 'meta_cloud_api',
+                         raw_message_id: replyData.messages?.[0]?.id || null
+                       });
 
+                       // Sync to WhatsApp Chats
+                       await supabase.from('whatsapp_chats').upsert({
+                         user_id: userData.id,
+                         firebase_uid: userId,
+                         jid: from,
+                         last_message_text: beatriceReply,
+                         last_message_timestamp: new Date().toISOString(),
+                         updated_at: new Date().toISOString()
+                       }, { onConflict: 'firebase_uid,jid' });
+
+                       }
+                       }
+                       }
+                       }
+                       }
+                       }
+                       } catch (err) {
+                       console.error("Meta Webhook processing error:", err);
+                       }
+                       });
   app.post('/api/whatsapp/send-template', authenticateToken, async (req: any, res) => {
     try {
       const userId = req.user.uid;
@@ -1213,6 +1309,16 @@ async function startServer() {
             provider: 'meta_cloud_api',
             raw_message_id: result.messages?.[0]?.id || null
          });
+
+         // Sync to WhatsApp Chats
+         await supabase.from('whatsapp_chats').upsert({
+            user_id: userData.id,
+            firebase_uid: userId,
+            jid: to,
+            last_message_text: `[Template: ${templateName}]`,
+            last_message_timestamp: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+         }, { onConflict: 'firebase_uid,jid' });
       }
 
       res.json(result);

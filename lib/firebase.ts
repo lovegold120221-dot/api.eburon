@@ -74,7 +74,7 @@ export const initAuth = (
   });
 };
 
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+export const googleSignIn = async (language?: string): Promise<{ user: User; accessToken: string } | null> => {
   try {
     isSigningIn = true;
     let result;
@@ -124,7 +124,8 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
         body: JSON.stringify({
           email: result.user.email,
           displayName: result.user.displayName,
-          photoURL: result.user.photoURL
+          photoURL: result.user.photoURL,
+          language: language || 'English'
         })
       });
     } catch (apiErr) {
