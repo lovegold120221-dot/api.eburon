@@ -15,14 +15,32 @@ export const apiClient = {
   post: async (endpoint: string, body: any, token?: string) => {
     const headers: any = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    
+
     const response = await fetch(endpoint, {
       method: 'POST',
       headers,
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     });
-    if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-    return response.json();
+
+    const responseText = await response.text();
+
+    let data: any;
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      data = { raw: responseText };
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error?.message ||
+          data?.error ||
+          data?.raw ||
+          `API Error: ${response.status}`
+      );
+    }
+
+    return data;
   },
 
   put: async (endpoint: string, body: any, token?: string) => {

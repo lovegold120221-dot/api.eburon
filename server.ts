@@ -15,6 +15,7 @@ const DIST_PATH = path.join(process.cwd(), 'dist');
 
 import QRCode from 'qrcode';
 import * as baileysLib from '@whiskeysockets/baileys';
+import { GoogleGenAI } from "@google/genai";
 
 const baileysAny = baileysLib as any;
 const makeWASocket = baileysLib.makeWASocket || baileysAny.default?.makeWASocket || baileysAny.default || baileysLib;
@@ -92,6 +93,24 @@ const waMessages = new Map<string, Map<string, any[]>>();
 
 const getAuthPath = (userId: string) => path.join(os.tmpdir(), `baileys_auth_${userId}`);
 
+async function generateBeatriceReply({ userId, message, channel, from }: any) {
+  if (!process.env.GEMINI_API_KEY) return "Beatrice is offline (missing Gemini API key).";
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: message,
+      config: {
+        systemInstruction: "You are Beatrice, a sharp, playful, incredibly human-like personal assistant and receptionist inside WhatsApp. Reply naturally and concisely (1-2 sentences). You are talking to a user's contact. Be warm but brief.",
+      }
+    });
+    return response.text;
+  } catch (e: any) {
+    console.error("Gemini Error:", e.message);
+    return "Oops, my brain disconnected for a second. Can you repeat that?";
+  }
+}
+
 async function startBaileysSession(userId: string) {
   const authPath = getAuthPath(userId);
   const { state, saveCreds } = await useMultiFileAuthState(authPath);
@@ -119,7 +138,8 @@ async function startBaileysSession(userId: string) {
     }
   });
 
-  sock.ev.on('messages.upsert', (m: any) => {
+  sock.ev.on('messages.upsert', async (m: any) => {
+    // Keep old behavior (storing recent messages)
     let userMessages = waMessages.get(userId);
     if (!userMessages) {
       userMessages = new Map();
@@ -127,14 +147,90 @@ async function startBaileysSession(userId: string) {
     }
     for (const msg of m.messages) {
       const chatId = msg.key.remoteJid;
-      if (!chatId) continue;
-      let chatMsgs = userMessages.get(chatId);
-      if (!chatMsgs) {
-        chatMsgs = [];
-        userMessages.set(chatId, chatMsgs);
+      if (chatId) {
+        let chatMsgs = userMessages.get(chatId);
+        if (!chatMsgs) {
+          chatMsgs = [];
+          userMessages.set(chatId, chatMsgs);
+        }
+        chatMsgs.push(msg);
+        if (chatMsgs.length > 50) userMessages.set(chatId, chatMsgs.slice(-50));
       }
-      chatMsgs.push(msg);
-      if (chatMsgs.length > 50) userMessages.set(chatId, chatMsgs.slice(-50));
+    }
+
+    // New Behavior: Handle incoming WhatsApp chats for Beatrice
+    const { messages, type } = m;
+    try {
+      if (type !== 'notify') return;
+
+      for (const message of messages) {
+        if (!message.message) continue;
+        if (message.key.fromMe) continue;
+
+        const remoteJid = message.key.remoteJid;
+        const messageText = 
+          message.message.conversation || 
+          message.message.extendedTextMessage?.text || 
+          message.message.imageMessage?.caption || 
+          message.message.videoMessage?.caption || 
+          '';
+
+        if (!remoteJid || !messageText.trim()) continue;
+
+        console.log('Incoming WhatsApp message:', {
+          userId,
+          from: remoteJid,
+          text: messageText,
+        });
+
+        // Save incoming message to Firestore
+        try {
+          const firestore = getFirestoreDb();
+          await firestore
+            .collection('users')
+            .doc(userId)
+            .collection('whatsapp_messages')
+            .add({
+              phone: remoteJid,
+              text: messageText,
+              direction: 'incoming',
+              status: 'received',
+              provider: 'baileys',
+              timestamp: new Date().toISOString(),
+              rawMessageId: message.key.id || null
+            });
+        } catch (logErr) {
+          console.warn('Failed to log incoming WhatsApp message:', logErr);
+        }
+
+        /**
+         * Send messageText to Beatrice's AI/chat backend here.
+         * Then send Beatrice's reply back to the same remoteJid.
+         */
+        const beatriceReply = await generateBeatriceReply({
+           userId,
+           message: messageText,
+           channel: 'whatsapp',
+           from: remoteJid,
+        });
+
+        if (beatriceReply) {
+          await sock.sendMessage(remoteJid, { text: beatriceReply });
+          try {
+             const firestore = getFirestoreDb();
+             await firestore.collection('users').doc(userId).collection('whatsapp_messages').add({
+                phone: remoteJid,
+                text: beatriceReply,
+                direction: 'sent',
+                status: 'sent',
+                provider: 'baileys',
+                timestamp: new Date().toISOString()
+             });
+          } catch (e) {}
+        }
+      }
+    } catch (error) {
+      console.error('WhatsApp incoming message handler error:', error);
     }
   });
 
@@ -413,76 +509,147 @@ async function startServer() {
     const phone = req.body.phone;
     const text = req.body.text;
 
-    const sock = waSessions.get(userId);
-    
-    // Feature: Fallback to Eburon Meta WhatsApp Cloud API if user's paired device is not connected.
-    if (!sock || !waStates.has(userId)) {
-      const eburonAccessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-      const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-      
-      try {
-        const response = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${eburonAccessToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            recipient_type: "individual",
-            to: phone.replace(/[^0-9]/g, ''),
-            type: "text",
-            text: {
-              preview_url: false,
-              body: text
-            }
-          })
-        });
+    if (!phone || !text) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing phone or text.',
+      });
+    }
 
-        const result = await response.json();
-        
+    const normalizedPhone = String(phone).replace(/\D/g, '');
+
+    if (!normalizedPhone) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid phone number.',
+      });
+    }
+
+    const sock = waSessions.get(userId);
+    const isBaileysConnected = Boolean(sock && waStates.has(userId));
+
+    if (isBaileysConnected) {
+      try {
+        const jid = phone.includes('@s.whatsapp.net')
+          ? phone
+          : `${normalizedPhone}@s.whatsapp.net`;
+
+        const result = await sock.sendMessage(jid, { text });
+
         try {
           const firestore = getFirestoreDb();
-          await firestore.collection('users').doc(req.user.uid).collection('whatsapp_messages').add({
-            phone: phone.replace(/[^0-9]/g, ''),
-            text,
-            direction: 'sent',
-            status: result.error ? 'failed' : 'sent',
-            messageId: result.messages?.[0]?.id || null,
-            error: result.error || null,
-            provider: 'meta_cloud_api',
-            timestamp: new Date().toISOString()
-          });
-        } catch (logErr) { }
 
-        return res.json({ success: true, provider: 'meta_cloud', result });
+          await firestore
+            .collection('users')
+            .doc(userId)
+            .collection('whatsapp_messages')
+            .add({
+              phone: jid,
+              text,
+              direction: 'sent',
+              status: 'sent',
+              provider: 'baileys',
+              messageId: result?.key?.id || null,
+              timestamp: new Date().toISOString(),
+            });
+        } catch (logErr) {
+          console.warn('Failed to log WhatsApp message to Firestore:', logErr);
+        }
+
+        return res.json({
+          success: true,
+          provider: 'baileys',
+          result,
+        });
       } catch (e: any) {
-        return res.status(500).json({ error: e.message });
+        console.error('Baileys send error:', e);
+
+        return res.status(500).json({
+          success: false,
+          provider: 'baileys',
+          error: e.message,
+        });
       }
     }
 
-    try {
-      const jid = phone.includes('@s.whatsapp.net') ? phone : `${phone.replace(/\D/g, '')}@s.whatsapp.net`;
-      const result = await sock.sendMessage(jid, { text });
+    const eburonAccessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
-      // Log to Firestore
+    if (!eburonAccessToken || !phoneNumberId) {
+      return res.status(500).json({
+        success: false,
+        provider: 'meta_cloud_api',
+        error:
+          'WhatsApp is not connected through Baileys, and Meta WhatsApp Cloud API environment variables are missing.',
+      });
+    }
+
+    try {
+      const response = await fetch(
+        `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${eburonAccessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: normalizedPhone,
+            type: 'text',
+            text: {
+              preview_url: false,
+              body: text,
+            },
+          }),
+        }
+      );
+
+      const result = await response.json();
+
       try {
         const firestore = getFirestoreDb();
-        await firestore.collection('users').doc(req.user.uid).collection('whatsapp_messages').add({
-          phone: jid,
-          text,
-          direction: 'sent',
-          status: 'sent',
-          messageId: result?.key?.id || null,
-          timestamp: new Date().toISOString()
-        });
+
+        await firestore
+          .collection('users')
+          .doc(userId)
+          .collection('whatsapp_messages')
+          .add({
+            phone: normalizedPhone,
+            text,
+            direction: 'sent',
+            status: response.ok && !result.error ? 'sent' : 'failed',
+            provider: 'meta_cloud_api',
+            messageId: result.messages?.[0]?.id || null,
+            error: result.error || null,
+            timestamp: new Date().toISOString(),
+          });
       } catch (logErr) {
-        console.warn('Failed to log WhatsApp message to Firestore:', logErr);
+        console.warn('Failed to log Meta WhatsApp message:', logErr);
       }
 
-      res.json({ success: true, result });
+      if (!response.ok || result.error) {
+        return res.status(500).json({
+          success: false,
+          provider: 'meta_cloud_api',
+          error: result.error || result,
+        });
+      }
+
+      return res.json({
+        success: true,
+        provider: 'meta_cloud_api',
+        result,
+      });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      console.error('Meta WhatsApp send error:', e);
+
+      return res.status(500).json({
+        success: false,
+        provider: 'meta_cloud_api',
+        error: e.message,
+      });
     }
   });
   if (!IS_PROD) {

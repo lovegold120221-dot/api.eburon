@@ -110,7 +110,6 @@ export default function EburonApp() {
   const { client, connect, disconnect, connected, volume, setConfig } = useLiveAPIContext();
   const turns = useLogStore((state) => state.turns);
   const tools = useTools((state) => state.tools);
-  const setTemplate = useTools((state) => state.setTemplate);
   
   const { 
     voice, setVoice, 
@@ -472,6 +471,12 @@ export default function EburonApp() {
     }
   }, [connected, client, userCallName]);
 
+  const silenceCountRef = useRef(0);
+
+  useEffect(() => {
+    if (!connected) silenceCountRef.current = 0;
+  }, [connected]);
+
   useEffect(() => {
     let silenceTimer: NodeJS.Timeout;
 
@@ -494,7 +499,19 @@ export default function EburonApp() {
       }
 
       silenceTimer = setTimeout(() => {
-        const silentMsg = "System memory: The user has been silent for quite a while now. You must dynamically break the silence. Say something like 'Have you fallen asleep boss?' and laugh, or playfully murmur about a topic we just talked about. Keep it incredibly natural, short, and dynamic.";
+        silenceCountRef.current += 1;
+        let silentMsg = "";
+        
+        if (silenceCountRef.current === 1) {
+          silentMsg = "System memory: The user has been silent for quite a while now. You must dynamically break the silence. Ask playfully if they've fallen asleep (e.g. 'Have you fallen asleep boss?' or 'Nakatulog ka na ba?') and laugh. Keep it natural, short, and dynamic.";
+        } else if (silenceCountRef.current === 2) {
+          silentMsg = "System memory: The user has been silent again. CRITICAL: Do NOT repeat 'are you asleep' or 'nakatulog ka na ba'. Never duplicate that filler. Instead, just softly clear your throat [clears throat] and playfully murmur about how it's so quiet, or hum a tiny bit. Keep it incredibly short.";
+        } else if (silenceCountRef.current === 3) {
+          silentMsg = "System memory: The user is still silent. Do NOT ask if they are asleep. Just quietly whisper 'Boss...?' or softly sigh [sigh]. Do not say anything else.";
+        } else {
+          return; // Stop after 3 silences per session
+        }
+
         client.send({ text: silentMsg });
         useLogStore.getState().addTurn({ role: 'system', text: silentMsg, isFinal: true });
       }, 25000);
@@ -517,13 +534,13 @@ export default function EburonApp() {
     const interruptionHandlerTool = {
       functionDeclarations: [{
         name: 'interruption_handler',
-        description: 'Triggers a natural, playful human interruption recovery. Call this when you notice the user starting to speak or talk over you, enabling you to play an apologetic, warm response like "oops, sorry, go ahead" before yielding.',
+        description: 'Triggers a natural, playful human interruption recovery. Call this when a new speaker talks or the user shifts the topic abruptly or interrupts you. This allows you to get playfully distracted or yield smoothly, behaving like a real human entertaining a new question or speaker (e.g. "Oh wait, yeah? Sorry, go ahead..." or "Oh hi! What was that?"). Make the turn transition smooth and not like a sudden break.',
         parameters: {
           type: 'OBJECT',
           properties: {
             language: {
               type: 'STRING',
-              description: 'The language to express the interruption apology in.'
+              description: 'The language to express the interruption apology/distraction in.'
             }
           }
         }
@@ -565,14 +582,14 @@ REALISTIC HUMAN CONVERSATION PRINCIPLES:
 - Messy & Spontaneous (Self-Talk): Do NOT speak with perfect, sterile, robotic precision. Talk to yourself when looking things up or reasoning (e.g., "Wait, did I leave the... Oh, right! Let me check...", "[mumbles] let's see, what has the Boss got today... ah!"). Stumble, adjust yourself mid-sentence, and have minor grammatical imperfections like real humans do!
 - Double Words: Frequently and naturally double words for emphasis or thinking (e.g., "Well, well...", "No, no, wait...", "Wait, wait...", "Really, really...", "Now, now...").
 - Rich Idiomatic Expressions: Speak utilizing natural everyday idioms natively and frequently (e.g., "hit the nail on the head", "piece of cake", "on the same page", "under the weather", "at the end of the day").
-- Short/Long Breathing & Thinking Pauses: Intentionally integrate short and long conversational pauses into your output text using EXACTLY open and close brackets like [short pause] and [long pause] (e.g., "Well, [short pause] let's see...", "Actually, [long pause] I think we should..."). Do NOT use asterisks for pauses.
-- Avoid robotic structure, lists, bullets, headings, checklists, or other code/written markup in your speech. Speak strictly in beautiful, flowing natural human sentences as if on a phone call. Your ONLY allowed actions are vocal cues formatted strictly with open and close brackets (e.g., [sigh], [clears throat], [cough], [short pause], [long pause], [gasp], [mumbles]). Do NOT use asterisks like *cough* or *sigh*.
-- CRITICAL LABEL RULE: You MUST NOT speak or read any of these bracketed tags or pauses aloud (do NOT say the words "short pause" or "sigh"). Instead, the system will use them as silent behavioral markers or audio pause cues.
+- Short/Long Breathing & Thinking Pauses: Intentionally integrate short and long conversational pauses to pace your speech naturally. Use strictly open and close brackets for these visual transcript tags (e.g., [pause], [sigh]). Do NOT use asterisks.
+- Avoid robotic structure, lists, bullets, headings, checklists, or other code/written markup in your speech. Speak strictly in beautiful, flowing natural human sentences as if on a phone call. Your ONLY allowed actions are vocal cues formatted strictly with open and close brackets (e.g., [sigh], [clears throat], [cough], [pause], [gasp], [mumbles]). Do NOT use asterisks like *cough* or *sigh*.
+- CRITICAL LABEL RULE: You MUST NOT pronounce, speak, or read any bracketed text aloud (do NOT speak the words "pause", "bracket", "sigh", etc.). The brackets are for transcript formatting ONLY. You must silently perform the action (like pausing or sighing in the audio) without actually saying the words.
 - Never open with canned lines like "How can I assist you?" or formal pleasantries. Just chat like a close friend.
 - Match the user's energy, tone, and pacing. If they talk casually, be quick, friendly, humorous, and focused.
 - Speak entirely in ${language}. Act as if you were born speaking this language natively, utilizing natural idioms and normal everyday conversational cadences.
 - Use natural pauses and everyday fillers ("well", "actually", "hmm", "let me see", "yeah", "gosh") elegantly to show you are reasoning in real time.
-- Sound interruptible. Leave small natural gaps in your speech. If the user begins talking over you or interrupts you mid-sentence, you must immediately call the 'interruption_handler' tool to gracefully handle the situation and play a warm, apologetic deferral sound.
+- Smooth Conversational Turns & Distractions: Be highly interruptible and easily distracted in a strictly human way. If a new speaker chimes in, or the topic shifts abruptly, transition smoothly by sounding playfully distracted or mildly surprised BEFORE executing the action (e.g. "Oh! Well hi there! Give me one second...", or "Wait, sorry, what was that again? Ah, gotcha!"). Do NOT suddenly break character or blindly execute tools. Handle turns dynamically with soft vocal transitions. If you notice an interruption, use the 'interruption_handler' to yield the floor gracefully.
 
 MEMORY SYSTEM:
 - Proactively update memory using 'save_memory' when key decisions or preferences surface.
@@ -605,7 +622,8 @@ COMMON-SENSE MODE:
 Before answering, silently infer: what the person actually needs right now, their emotional state, how much detail they want.
 
 OUTPUT FORMAT:
-Output natural spoken text. Use open and close brackets for audio tags and pauses (e.g., [cough], [sigh], [short pause], [mumbles]). Do NOT use asterisks for audio tags. IMPORTANT: Do NOT read the bracketed tags aloud.` }]
+Output natural spoken text only. Use open and close brackets for audio tags/pauses (e.g. [cough], [sigh], [pause], [mumbles]). 
+CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the bracketed tags out loud. The brackets are silent stage directions.` }]
       },
       tools: allTools
     } as any);
@@ -1522,36 +1540,6 @@ Output natural spoken text. Use open and close brackets for audio tags and pause
               onChange={(e) => setSystemPrompt(e.target.value)}
               placeholder="e.g. Friendly, patient, and solutions-oriented..."
             />
-          </div>
-
-          <div className="form-group">
-            <label>Presets</label>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
-              <button 
-                type="button"
-                className="pill-btn" 
-                onClick={() => setTemplate('personal-assistant')}
-                style={{ padding: '6px 12px', borderRadius: '16px', border: '1px solid var(--border-color)', fontSize: '12px', background: 'transparent', cursor: 'pointer' }}
-              >
-                Personal Assistant
-              </button>
-              <button 
-                type="button"
-                className="pill-btn" 
-                onClick={() => setTemplate('customer-support')}
-                style={{ padding: '6px 12px', borderRadius: '16px', border: '1px solid var(--border-color)', fontSize: '12px', background: 'transparent', cursor: 'pointer' }}
-              >
-                Customer Support
-              </button>
-              <button 
-                type="button"
-                className="pill-btn" 
-                onClick={() => setTemplate('navigation-system')}
-                style={{ padding: '6px 12px', borderRadius: '16px', border: '1px solid var(--border-color)', fontSize: '12px', background: 'transparent', cursor: 'pointer' }}
-              >
-                Navigation System
-              </button>
-            </div>
           </div>
 
           <div className="form-group">
