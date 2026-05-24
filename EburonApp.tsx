@@ -244,7 +244,7 @@ export default function EburonApp() {
                 memories: [],
                 settings: {
                   personaName: 'Beatrice',
-                  userCallName: user.displayName || 'Friend',
+                  userCallName: user.displayName || 'Boss',
                   systemPrompt: "Friendly, patient, and solutions-oriented...",
                   voice: 'Puck',
                   language: 'en-US',
@@ -369,12 +369,13 @@ export default function EburonApp() {
   useEffect(() => {
     if (connected && client && !hasStartedRef.current) {
        hasStartedRef.current = true;
-       // AI starts the conversation on connection if needed, but user requested to remove the specific greeting
+       // Initiate call greeting addressing the user as Boss/userCallName
+       client.send({ text: `Beatrice, greet me right now! Say hello and call me "${userCallName}" in a warm, casual, extremely natural human way.` });
     }
     if (!connected) {
       hasStartedRef.current = false;
     }
-  }, [connected, client]);
+  }, [connected, client, userCallName]);
 
   useEffect(() => {
     const enabledTools = tools
