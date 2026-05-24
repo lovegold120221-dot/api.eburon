@@ -11,7 +11,7 @@ import fs from 'fs';
 dotenv.config();
 
 // Constants for production pathing
-const IS_PROD = process.env.NODE_ENV === 'production';
+const IS_PROD = process.env.NODE_ENV === 'production' || !!process.env.VITE_FIREBASE_API_KEY; // Stronger prod signal
 const DIST_PATH = path.join(process.cwd(), 'dist');
 
 import QRCode from 'qrcode';
@@ -516,7 +516,9 @@ async function startServer() {
         appId: process.env.VITE_FIREBASE_APP_ID,
         measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID,
       },
-      googleClientId: process.env.GOOGLE_CLIENT_ID
+      googleClientId: process.env.GOOGLE_CLIENT_ID,
+      supabaseUrl: process.env.SUPABASE_URL,
+      supabaseAnonKey: process.env.SUPABASE_PUBLISHABLE_KEY
     });
   });
 

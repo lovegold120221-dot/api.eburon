@@ -1,11 +1,30 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL || '';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_PUBLISHABLE_KEY || '';
+export let supabase: SupabaseClient | null = null;
 
-export const supabase = (supabaseUrl && supabaseKey) 
-  ? createClient(supabaseUrl, supabaseKey) 
-  : null;
+export async function initSupabase() {
+  if (supabase) return supabase;
+  
+  try {
+    const res = await fetch('/api/config');
+    const config = await res.json();
+    
+    // Use the publishable key for client-side reporting if needed, 
+    // but typically the backend should handle this.
+    // For now, mapping to the provided config structure.
+    if (config.supabaseUrl && config.supabaseAnonKey) {
+       supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
+    } else {
+       // Fallback to internal VITE if provided (though we are moving away)
+       const url = import.meta.env.VITE_SUPABASE_URL || '';
+       const key = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+       if (url && key) supabase = createClient(url, key);
+    }
+  } catch (e) {
+    console.error("Failed to init Supabase in report-master:", e);
+  }
+  return supabase;
+}
 
 type HandleReportToMasterCommentInput = {
   supabase: SupabaseClient;

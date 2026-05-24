@@ -16,7 +16,8 @@ export const GooglePicker = () => {
         (window as any).gapi.load('picker', {
           callback: () => setPickerApiLoaded(true),
           onerror: () => console.error('GAPI load failed'),
-          timeout: 5000
+          timeout: 5000,
+          ontimeout: () => console.error('GAPI load timed out')
         });
       }
     };

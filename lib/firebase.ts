@@ -22,16 +22,22 @@ provider.addScope('https://www.googleapis.com/auth/forms.responses.readonly');
 provider.addScope('https://www.googleapis.com/auth/contacts');
 provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
 
+let initPromise: Promise<{ app: FirebaseApp, auth: Auth }> | null = null;
+
 export async function initFirebase() {
-  if (app) return { app, auth };
+  if (initPromise) return initPromise;
   
-  const res = await fetch('/api/config');
-  const config = await res.json();
+  initPromise = (async () => {
+    const res = await fetch('/api/config');
+    const config = await res.json();
+    
+    app = initializeApp(config.firebase);
+    auth = getAuth(app);
+    
+    return { app, auth };
+  })();
   
-  app = initializeApp(config.firebase);
-  auth = getAuth(app);
-  
-  return { app, auth };
+  return initPromise;
 }
 
 let isSigningIn = false;
@@ -90,15 +96,18 @@ export const googleSignIn = async (language?: string): Promise<{ user: User; acc
 };
 
 export const initAuth = (onAuthSuccess: (user: User, token: string) => void, onAuthFailure: () => void) => {
-  initFirebase().then(({ auth }) => {
-    return onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const token = await getAccessToken();
-        onAuthSuccess(user, token || '');
-      } else {
-        onAuthFailure();
-      }
-    });
+  if (!auth) {
+    // This should not happen if App.tsx logic is followed
+    console.error("Firebase auth not initialized yet.");
+    return () => {};
+  }
+  return onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      const token = await getAccessToken();
+      onAuthSuccess(user, token || '');
+    } else {
+      onAuthFailure();
+    }
   });
 };
 

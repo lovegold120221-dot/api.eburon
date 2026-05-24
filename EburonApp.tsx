@@ -791,7 +791,8 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
     useLogStore.getState().addTurn({ role: 'user', text, isFinal: true });
     setMessage('');
     
-    import('./lib/report-master').then(({ handleReportToMasterComment, supabase }) => {
+    import('./lib/report-master').then(async ({ handleReportToMasterComment, initSupabase }) => {
+      const supabase = await initSupabase();
       if (supabase) {
         handleReportToMasterComment({
           supabase,
