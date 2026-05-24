@@ -166,7 +166,7 @@ Output ONLY a concise 2-3 paragraph 'MIMICRY PROFILE' that an AI should follow t
   }
 }
 async function generateBeatriceReply({ userId, message, channel, from }: any) {
-  if (!process.env.GEMINI_API_KEY) return "Beatrice is offline (missing Gemini API key).";
+  if (!process.env.GEMINI_API_KEY) return "Beatrice is currently undergoing maintenance. Please try again later.";
   try {
     const supabase = getSupabase();
     
@@ -509,7 +509,8 @@ async function startServer() {
       const data = await response.json();
       res.json(data);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'API Error');
+      res.status(500).json({ success: false, error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 
@@ -522,7 +523,8 @@ async function startServer() {
       const data = await response.json();
       res.json(data);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'API Error');
+      res.status(500).json({ success: false, error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 
@@ -535,7 +537,8 @@ async function startServer() {
       const data = await response.json();
       res.json(data);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'API Error');
+      res.status(500).json({ success: false, error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 
@@ -549,7 +552,8 @@ async function startServer() {
       const data = await response.json();
       res.json(data);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'API Error');
+      res.status(500).json({ success: false, error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 
@@ -663,7 +667,8 @@ async function startServer() {
       if (error) throw error;
       res.status(201).json(data);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'API Error');
+      res.status(500).json({ success: false, error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 
@@ -736,7 +741,8 @@ async function startServer() {
       if (error) throw error;
       res.status(201).json(data);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'API Error');
+      res.status(500).json({ success: false, error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 
@@ -781,7 +787,8 @@ async function startServer() {
       if (error) throw error;
       res.status(201).json(data);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'API Error');
+      res.status(500).json({ success: false, error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 
@@ -1456,7 +1463,8 @@ async function startServer() {
 
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'API Error');
+      res.status(500).json({ success: false, error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 

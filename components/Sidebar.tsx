@@ -13,7 +13,8 @@ import { auth } from '@/lib/firebase';
 import { X, Check, Sliders, Volume2, Globe, FileText, User, Cpu, Sparkles, CheckSquare, Square, Plus, Trash2, Edit2 } from 'lucide-react';
 
 const AVAILABLE_MODELS = [
-  DEFAULT_LIVE_API_MODEL
+  { label: 'Eburon AI Ultra (Multimodal)', value: DEFAULT_LIVE_API_MODEL },
+  { label: 'Eburon AI Pro (High Speed)', value: 'gemini-2.0-flash' }
 ];
 
 export default function Sidebar() {
@@ -250,7 +251,7 @@ export default function Sidebar() {
 
             {/* Model Setup */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-gray-400 ml-1">Gemini AI Model Type</label>
+              <label className="text-xs font-medium text-gray-400 ml-1">Eburon AI Intelligence Engine</label>
               <div className="relative">
                 <select 
                   value={model} 
@@ -259,8 +260,8 @@ export default function Sidebar() {
                   className="w-full appearance-none bg-[#151515] border border-[#222] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#cbfb45] disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   {AVAILABLE_MODELS.map(m => (
-                    <option key={m} value={m}>
-                      {m}
+                    <option key={m.value} value={m.value}>
+                      {m.label}
                     </option>
                   ))}
                 </select>

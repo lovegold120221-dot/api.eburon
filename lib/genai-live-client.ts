@@ -36,7 +36,7 @@ if (typeof window !== 'undefined') {
       const search = urlStr.includes('?') ? urlStr.substring(urlStr.indexOf('?')) : '';
       const newUrl = `${protocol}://${host}${LOCAL_PROXY_PATH}${search}`;
       
-      console.log(`GenAI Live Client: Proxying ${G_WS_URL} -> ${newUrl}`);
+      console.log(`Eburon AI: Establishing connection to engine...`);
       return new OriginalWebSocket(newUrl, protocols);
     }
     return new OriginalWebSocket(url, protocols);

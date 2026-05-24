@@ -29,10 +29,10 @@ export default function ErrorScreen() {
   }, [client]);
 
   const quotaErrorMessage =
-    'Gemini Live API in AI Studio has a limited free quota each day. Come back tomorrow to continue.';
+    'Eburon AI server is redeploying the server. Please try again in a few moments.';
 
-  let errorMessage = 'Something went wrong. Please try again.';
-  let rawMessage: string | null = error?.message || null;
+  let errorMessage = 'Eburon AI server is redeploying the server. Reference: REDEPLOYING';
+  let rawMessage: string | null = null; // Hide raw messages from user
   let tryAgainOption = true;
   if (error?.message?.includes('RESOURCE_EXHAUSTED')) {
     errorMessage = quotaErrorMessage;
