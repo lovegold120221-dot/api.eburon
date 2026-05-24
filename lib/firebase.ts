@@ -1,6 +1,5 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, linkWithPopup } from 'firebase/auth';
-import { initializeFirestore, doc, getDocFromServer, getDoc, setDoc, getDocFromCache } from 'firebase/firestore';
 import firebaseConfigFromFile from '../firebase-applet-config.json';
 
 const getEnv = (key: string): string | undefined => {
@@ -32,10 +31,6 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-const firestoreId = firebaseConfig.firestoreDatabaseId || '';
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true
-}, firestoreId === '' ? undefined : firestoreId); /* CRITICAL: The app will break without this line */
 
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({
@@ -118,27 +113,22 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
       console.warn('Failed to cache token to localStorage:', localStoreErr);
     }
 
-    // Securely persist Google OAuth user info, settings & credentials in the user's Firestore document
+    // Securely persist Google OAuth user info in the user's Supabase profile via backend
     try {
-      const updateData: any = {
-        email: result.user.email,
-        displayName: result.user.displayName,
-        photoURL: result.user.photoURL,
-        accessToken: cachedAccessToken,
-        updatedAt: new Date().toISOString()
-      };
-      if (result.user.displayName) {
-        const firstName = result.user.displayName.split(' ')[0];
-        const callName = firstName.toLowerCase().startsWith('boss') 
-          ? result.user.displayName 
-          : 'Boss ' + firstName;
-        updateData.settings = {
-          userCallName: callName
-        };
-      }
-      await setDoc(doc(db, 'users', result.user.uid), updateData, { merge: true });
-    } catch (fsErr) {
-      console.error('Failed to save authenticated user / token to Firestore of sign in:', fsErr);
+      await fetch('/api/user/sync', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${await result.user.getIdToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: result.user.email,
+          displayName: result.user.displayName,
+          photoURL: result.user.photoURL
+        })
+      });
+    } catch (apiErr) {
+      console.error('Failed to sync authenticated user to Supabase:', apiErr);
     }
 
     return { user: result.user, accessToken: cachedAccessToken };
@@ -148,6 +138,14 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
   } finally {
     isSigningIn = false;
   }
+};
+
+export const getFirebaseIdToken = async (): Promise<string | null> => {
+  const currentUser = auth.currentUser;
+  if (currentUser) {
+    return currentUser.getIdToken(true);
+  }
+  return null;
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
@@ -166,40 +164,6 @@ export const getAccessToken = async (): Promise<string | null> => {
     } catch (localStoreErr) {
       console.warn('Could not read token from localStorage cache:', localStoreErr);
     }
-
-    // 2. Fetch from Firestore (falling back to cache upon offline exception)
-    try {
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      let userSnap;
-      try {
-        userSnap = await getDoc(userDocRef);
-      } catch (err: any) {
-        const isOffline = err?.message?.toLowerCase().includes('offline') || err?.code === 'unavailable';
-        if (isOffline) {
-          console.warn('Firestore is offline, attempting to resolve token from local cache...');
-          try {
-            userSnap = await getDocFromCache(userDocRef);
-          } catch (cacheErr) {
-            console.warn('Failed to retrieve token from Firestore client cache:', cacheErr);
-          }
-        } else {
-          throw err;
-        }
-      }
-
-      if (userSnap && userSnap.exists()) {
-        const data = userSnap.data();
-        if (data && data.accessToken) {
-          cachedAccessToken = data.accessToken;
-          try {
-            localStorage.setItem(`eburon_at_${currentUser.uid}`, data.accessToken);
-          } catch (_) {}
-          return data.accessToken;
-        }
-      }
-    } catch (e) {
-      console.error('Error fetching token from Firestore:', e);
-    }
   }
   return null;
 };
@@ -214,60 +178,3 @@ export const logout = async () => {
   await auth.signOut();
   cachedAccessToken = null;
 };
-
-export enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
-  }
-}
-
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData?.map(provider => ({
-        providerId: provider.providerId,
-        email: provider.email,
-      })) || []
-    },
-    operationType,
-    path
-  }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
-
-export async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if(error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration.");
-    }
-  }
-}

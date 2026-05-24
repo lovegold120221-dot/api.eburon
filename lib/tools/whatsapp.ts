@@ -10,7 +10,7 @@ export const whatsappTools: FunctionCall[] = [
       properties: {
         phone: {
           type: 'STRING',
-          description: 'The phone number of the recipient in international format (e.g., "15550199999").',
+          description: 'The phone number of the recipient in international format (e.g., "639000000000").',
         },
         text: {
           type: 'STRING',
@@ -55,7 +55,7 @@ export const whatsappTools: FunctionCall[] = [
       properties: {
         jid: {
           type: 'STRING',
-          description: 'Optional. The WhatsApp JID (e.g. 15551234567@s.whatsapp.net) to get the message history for a specific chat.'
+          description: 'Optional. The WhatsApp JID (e.g. 639000000000@s.whatsapp.net) to get the message history for a specific chat.'
         }
       },
     },
@@ -70,7 +70,7 @@ export const whatsappTools: FunctionCall[] = [
       properties: {
         to: {
           type: 'STRING',
-          description: 'The phone number of the recipient in international format (e.g., "15550199999").',
+          description: 'The phone number of the recipient in international format (e.g., "639000000000").',
         },
         templateName: {
           type: 'STRING',

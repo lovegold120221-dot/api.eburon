@@ -25,8 +25,7 @@ import { AudioStreamer } from '../../lib/audio-streamer';
 import { audioContext } from '../../lib/utils';
 import VolMeterWorket from '../../lib/worklets/vol-meter';
 import { useLogStore, useSettings } from '@/lib/state';
-import { db, auth, handleFirestoreError, OperationType, getAccessToken } from '@/lib/firebase';
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, addDoc, getDocs, query, where, limit } from 'firebase/firestore';
+import { auth, getAccessToken, getFirebaseIdToken } from '@/lib/firebase';
 import * as api from '../../lib/api-client';
 
 export type UseLiveApiResults = {
@@ -581,7 +580,7 @@ export function useLiveApi({
 
         if (fc.name === 'search_memories') {
            const { query } = fc.args as any;
-           const token = await getAccessToken();
+           const token = await getFirebaseIdToken();
            if (!token) {
                responsePayload = { error: 'No user authenticated.' };
            } else {
@@ -603,7 +602,7 @@ export function useLiveApi({
 
         if (fc.name === 'save_note') {
            const { title, content } = fc.args as any;
-           const token = await getAccessToken();
+           const token = await getFirebaseIdToken();
            if (!token) {
                responsePayload = { error: 'No user authenticated. Cannot save note.' };
            } else {
@@ -625,7 +624,7 @@ export function useLiveApi({
         }
 
         if (fc.name === 'list_notes') {
-            const token = await getAccessToken();
+            const token = await getFirebaseIdToken();
             if (!token) {
                 responsePayload = { error: 'No user authenticated.' };
             } else {
@@ -644,7 +643,7 @@ export function useLiveApi({
 
         if (fc.name === 'read_note') {
             const { title } = fc.args as any;
-            const token = await getAccessToken();
+            const token = await getFirebaseIdToken();
             if (!token) {
                 responsePayload = { error: 'No user authenticated.' };
             } else {
@@ -733,7 +732,7 @@ export function useLiveApi({
 
         if (fc.name === 'send_whatsapp_template') {
             const { to, templateName, languageCode, parameters } = fc.args as any;
-            const token = await getAccessToken();
+            const token = await getFirebaseIdToken();
             if (!token) {
                 responsePayload = { error: 'No user authenticated.' };
             } else {

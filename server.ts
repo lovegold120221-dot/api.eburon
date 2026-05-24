@@ -5,7 +5,6 @@ import { createServer as createViteServer } from 'vite';
 import admin from 'firebase-admin';
 import dotenv from 'dotenv';
 import fs from 'fs';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 
 dotenv.config();
 
@@ -28,34 +27,24 @@ import Pino from 'pino';
 // Initialize Firebase Admin lazily
 let adminInitialized = false;
 function getFirebaseAdmin() {
-  if (!admin.apps.length) {
-    let projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
-    
-    if (!projectId) {
-      try {
-        const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-        if (fs.existsSync(configPath)) {
-          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-          projectId = config.projectId;
-        }
-      } catch (e) {
-        console.warn('Failed to parse firebase config from file:', e);
-      }
-    }
-
-    if (!projectId) {
-      projectId = "gen-lang-client-0836251512";
-    }
-
+  if (admin.apps.length === 0) {
     try {
-      if (projectId) {
-        admin.initializeApp({ projectId });
+      const serviceAccountPath = path.join(process.cwd(), 'service-account.json');
+      if (fs.existsSync(serviceAccountPath)) {
+        const fileContent = fs.readFileSync(serviceAccountPath, 'utf8');
+        const serviceAccount = JSON.parse(fileContent);
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount)
+        });
+        console.log('Firebase Admin initialized with service account.');
       } else {
         admin.initializeApp();
+        console.log('Firebase Admin initialized with default credentials.');
       }
-      console.log('Firebase Admin initialized. apps.length:', admin.apps.length);
     } catch (e: any) {
       console.warn('Firebase Admin initialization failed:', e.message || e);
+      // Fallback to basic initialization to prevent app/no-app errors
+      try { if (admin.apps.length === 0) admin.initializeApp(); } catch {}
     }
   }
   return admin;
@@ -130,27 +119,48 @@ async function generateBeatriceReply({ userId, message, channel, from }: any) {
   if (!process.env.GEMINI_API_KEY) return "Beatrice is offline (missing Gemini API key).";
   try {
     const supabase = getSupabase();
-    const { data: userData, error } = await supabase
-      .from('users')
-      .select('persona_name, system_prompt, user_call_name')
-      .eq('firebase_uid', userId)
-      .single();
-
-    if (error && error.code !== 'PGRST116') {
-      console.error("Supabase Error fetching user for Beatrice reply:", error);
-    }
     
+    // 1. Fetch User Settings & Persona
+    const { data: userData } = await supabase.from('users').select('*').eq('firebase_uid', userId).single();
+    
+    // 2. Fetch Recent Conversation History (Last 10 turns)
+    const { data: history } = await supabase
+      .from('conversation_history')
+      .select('role, text')
+      .eq('firebase_uid', userId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    
+    // 3. Fetch Core Memories
+    const { data: memories } = await supabase
+      .from('memories')
+      .select('content, type')
+      .eq('firebase_uid', userId)
+      .limit(20);
+
     const personaName = userData?.persona_name || 'Beatrice';
     const systemPrompt = userData?.system_prompt || "You are Beatrice, a sharp, playful, incredibly human-like personal assistant and receptionist inside WhatsApp. Reply naturally and concisely (1-2 sentences). You are talking to a user's contact. Be warm but brief.";
     const userCallName = userData?.user_call_name || 'Boss';
 
+    const memoryStr = memories?.map((m: any) => `- ${m.content} (${m.type})`).join('\n') || "";
+    const historyStr = history?.reverse().map((h: any) => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n') || "";
+
+    const fullSystemInstruction = `Your name is ${personaName}. You are an assistant for ${userCallName}. ${systemPrompt}
+    
+${memoryStr ? `### CORE MEMORIES:\n${memoryStr}\n` : ''}
+${historyStr ? `### RECENT CONVERSATION HISTORY:\n${historyStr}\n` : ''}
+    
+IMPORTANT: Keep your response short and sweet (1-2 sentences). You are chatting on WhatsApp.`;
+
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash", // Reverting to a known available model if 2.5 was a typo/placeholder
+      model: "gemini-2.0-flash",
       contents: [{ role: 'user', parts: [{ text: message }] }],
-      systemInstruction: `Your name is ${personaName}. You are an assistant for ${userCallName}. ${systemPrompt}`
+      systemInstruction: fullSystemInstruction
     });
-    return response.response.text();
+    
+    const replyText = response.response.text();
+    return replyText;
   } catch (e: any) {
     const ref = logErrorWithReference(e, 'generateBeatriceReply');
     return `Eburon AI server is redeploying the server. Reference: ${ref}`;
@@ -387,6 +397,89 @@ async function startServer() {
   app.get('/api/avatar', (req, res) => {
     // Return Beatrice avatar URL or image
     res.redirect('https://ui-avatars.com/api/?name=Beatrice&background=cbfb45&color=000&size=200');
+  });
+
+  // User Profile Sync (Supabase)
+  app.post('/api/user/sync', authenticateToken, async (req: any, res) => {
+    try {
+      const supabase = getSupabase();
+      const { email, displayName, photoURL } = req.body;
+      const { error } = await supabase.from('users').upsert({
+        firebase_uid: req.user.uid,
+        email: email,
+        display_name: displayName,
+        photo_url: photoURL,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'firebase_uid' });
+      
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (e: any) {
+      const ref = logErrorWithReference(e, 'POST /api/user/sync');
+      res.status(500).json({ error: `Eburon AI server is redeploying. Reference: ${ref}` });
+    }
+  });
+
+  // User Location (Supabase)
+  app.put('/api/user/location', authenticateToken, async (req: any, res) => {
+    try {
+      const supabase = getSupabase();
+      const { latitude, longitude } = req.body;
+      const { error } = await supabase.from('users').update({
+        latitude,
+        longitude,
+        updated_at: new Date().toISOString()
+      }).eq('firebase_uid', req.user.uid);
+      
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (e: any) {
+      const ref = logErrorWithReference(e, 'PUT /api/user/location');
+      res.status(500).json({ error: `Eburon AI server is redeploying. Reference: ${ref}` });
+    }
+  });
+
+  // Conversation History (Supabase)
+  app.get('/api/history', authenticateToken, async (req: any, res) => {
+    try {
+      const supabase = getSupabase();
+      const { data, error } = await supabase
+        .from('conversation_history')
+        .select('*')
+        .eq('firebase_uid', req.user.uid)
+        .order('created_at', { ascending: true })
+        .limit(100);
+      
+      if (error) throw error;
+      res.json(data || []);
+    } catch (e: any) {
+      const ref = logErrorWithReference(e, 'GET /api/history');
+      res.status(500).json({ error: `Eburon AI server is redeploying. Reference: ${ref}` });
+    }
+  });
+
+  app.post('/api/history', authenticateToken, async (req: any, res) => {
+    try {
+      const supabase = getSupabase();
+      const { role, text, metadata } = req.body;
+      
+      // Ensure user exists
+      await supabase.from('users').upsert({ firebase_uid: req.user.uid }, { onConflict: 'firebase_uid', ignoreDuplicates: true });
+      const { data: userData } = await supabase.from('users').select('id').eq('firebase_uid', req.user.uid).single();
+
+      const { data, error } = await supabase.from('conversation_history').insert({
+        user_id: userData?.id,
+        firebase_uid: req.user.uid,
+        role,
+        text,
+        metadata
+      }).select().single();
+      
+      if (error) throw error;
+      res.status(201).json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // Settings (Migrated to Supabase)
@@ -773,23 +866,27 @@ async function startServer() {
         const result = await sock.sendMessage(jid, { text });
 
         try {
-          const firestore = getFirestoreDb();
-
-          await firestore
-            .collection('users')
-            .doc(userId)
-            .collection('whatsapp_messages')
-            .add({
-              phone: jid,
-              text,
-              direction: 'sent',
-              status: 'sent',
-              provider: 'baileys',
-              messageId: result?.key?.id || null,
-              timestamp: new Date().toISOString(),
-            });
+          const supabase = getSupabase();
+          // Ensure user exists
+          await supabase.from('users').upsert({ firebase_uid: userId }, { onConflict: 'firebase_uid', ignoreDuplicates: true });
+          const { data: userData } = await supabase.from('users').select('id').eq('firebase_uid', userId).single();
+          
+          if (userData) {
+            await supabase
+              .from('whatsapp_messages')
+              .insert({
+                user_id: userData.id,
+                firebase_uid: userId,
+                phone: jid,
+                text,
+                direction: 'sent',
+                status: 'sent',
+                provider: 'baileys',
+                raw_message_id: result?.key?.id || null
+              });
+          }
         } catch (logErr) {
-          console.warn('Failed to log WhatsApp message to Firestore:', logErr);
+          console.warn('Failed to log WhatsApp message to Supabase:', logErr);
         }
 
         return res.json({
@@ -972,11 +1069,7 @@ async function startServer() {
               const from = message.from;
               
               // Identify User
-              let { data: userData } = await supabase.from('users').select('*').eq('whatsapp_phone_number_id', phoneNumberId).maybeSingle();
-              if (!userData && phoneNumberId === process.env.WHATSAPP_PHONE_NUMBER_ID) {
-                 const { data: firstUser } = await supabase.from('users').select('*').limit(1).maybeSingle();
-                 userData = firstUser;
-              }
+              const { data: userData } = await supabase.from('users').select('*').eq('whatsapp_phone_number_id', phoneNumberId).maybeSingle();
 
               if (!userData) {
                  console.warn(`No user found for Phone ID: ${phoneNumberId}`);

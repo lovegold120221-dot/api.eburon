@@ -8,10 +8,9 @@ import { Modality } from '@google/genai';
 import { useVideoStream } from './hooks/use-video-stream';
 import { LANGUAGES } from './lib/languages';
 import { AVAILABLE_VOICES, VOICE_ALIASES } from './lib/constants';
-import { auth, db, handleFirestoreError, OperationType, initAuth, googleSignIn, getAccessToken } from './lib/firebase';
+import { auth, initAuth, googleSignIn, getAccessToken } from './lib/firebase';
 import firebaseConfig from './firebase-applet-config.json';
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot, collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { 
   User, ListChecks, Calendar, FolderOpen, Search, Signature, 
@@ -365,115 +364,55 @@ export default function EburonApp() {
           setGoogleToken(token);
         }
         try {
-          const docRef = doc(db, 'users', user.uid);
+          const idToken = await user.getIdToken();
           
-          // Guarantee Firestore document exists for active connection
-          try {
-            const userSnap = await getDoc(docRef);
-            if (!userSnap.exists()) {
-              console.log('Initializing user document in Firestore...');
-              await setDoc(docRef, {
-                email: user.email || '',
-                displayName: user.displayName || '',
-                photoURL: user.photoURL || '',
-                accessToken: token || null,
-                memories: [],
-                settings: {
-                  personaName: 'Beatrice',
-                  userCallName: user.displayName || 'Boss',
-                  systemPrompt: "Friendly, patient, and solutions-oriented...",
-                  voice: 'Puck',
-                  language: 'en-US',
-                  tools: useTools.getState().tools || []
-                },
-                updatedAt: new Date().toISOString()
-              }, { merge: true });
-            } else {
-              // Ensure we don't wipe existing settings but do update token if we have a fresh one and catch user display name for settings
-              const updateData: any = {
-                updatedAt: new Date().toISOString()
-              };
-              if (token) {
-                updateData.accessToken = token;
-              }
-              if (user.displayName) {
-                const firstName = user.displayName.split(' ')[0];
-                const callName = firstName.toLowerCase().startsWith('boss') 
-                  ? user.displayName 
-                  : 'Boss ' + firstName;
-                updateData.settings = {
-                  userCallName: callName
-                };
-              }
-              await setDoc(docRef, updateData, { merge: true });
-            }
-            if (user.displayName) {
-              const firstName = user.displayName.split(' ')[0];
-              const callName = firstName.toLowerCase().startsWith('boss') 
-                ? user.displayName 
-                : 'Boss ' + firstName;
-              useSettings.getState().setUserCallName(callName);
-            }
-          } catch (initErr) {
-            console.warn('Failed to auto-initialize user document:', initErr);
+          // 1. Parallel Data Hydration from Supabase via Backend
+          const [settingsRes, memoriesRes, historyRes] = await Promise.all([
+            fetch('/api/settings', { headers: { 'Authorization': `Bearer ${idToken}` } }),
+            fetch('/api/memories', { headers: { 'Authorization': `Bearer ${idToken}` } }),
+            fetch('/api/history', { headers: { 'Authorization': `Bearer ${idToken}` } })
+          ]);
+
+          const [settingsData, memoriesData, historyData] = await Promise.all([
+            settingsRes.json(),
+            memoriesRes.json(),
+            historyRes.json()
+          ]);
+
+          // Hydrate Settings
+          if (settingsData && !settingsData.error) {
+              const setSettings = useSettings.getState();
+              if (settingsData.persona_name) setSettings.setPersonaName(settingsData.persona_name);
+              if (settingsData.user_call_name) setSettings.setUserCallName(settingsData.user_call_name);
+              if (settingsData.system_prompt) setSettings.setSystemPrompt(settingsData.system_prompt);
+              if (settingsData.voice) setSettings.setVoice(settingsData.voice);
+              if (settingsData.language) setSettings.setLanguage(settingsData.language);
+              if (settingsData.tools) useTools.getState().setTools(settingsData.tools);
           }
 
-          unsubscribeSnapshot = onSnapshot(docRef, (snapshot) => {
-            if (snapshot.exists()) {
-              const data = snapshot.data();
-              if (data.accessToken) {
-                setGoogleToken(data.accessToken);
-              } else {
-                setGoogleToken(null);
-              }
-              if (data.memories) {
-                setMemories(data.memories);
-              }
-              if (data.settings) {
-                const s = data.settings;
-                const setSettings = useSettings.getState();
-                if (s.personaName) setSettings.setPersonaName(s.personaName);
-                if (s.userCallName) setSettings.setUserCallName(s.userCallName);
-                if (s.systemPrompt) setSettings.setSystemPrompt(s.systemPrompt);
-                if (s.voice) setSettings.setVoice(s.voice);
-                if (s.language) setSettings.setLanguage(s.language);
-                if (s.tools) useTools.setState({ tools: s.tools });
-              }
-            }
-          }, (err) => {
-            console.log('Firestore snapshot warning:', err.message);
-          });
+          // Hydrate Memories
+          if (Array.isArray(memoriesData)) {
+             setMemories(memoriesData);
+          }
 
-          // Fetch past 30 history logs
-          const q = query(
-            collection(db, 'users', user.uid, 'history'),
-            orderBy('timestamp', 'desc'),
-            limit(30)
-          );
-          const historySnap = await getDocs(q);
-          const loadedHistory = historySnap.docs.map(doc => {
-            const d = doc.data();
-            return {
-              role: d.role,
-              text: d.text,
-              timestamp: d.timestamp ? new Date(d.timestamp) : new Date(),
-              isFinal: d.isFinal
-            };
-          });
-          loadedHistory.reverse();
-          setHistoryTurns(loadedHistory);
+          // Hydrate History
+          if (Array.isArray(historyData)) {
+              const loadedHistory = historyData.map((t: any) => ({
+                 role: t.role,
+                 text: t.text,
+                 timestamp: t.created_at ? new Date(t.created_at) : new Date(),
+                 isFinal: true
+              }));
+              setHistoryTurns(loadedHistory);
+          }
         } catch (e) {
-          console.warn('Database lookup/history fetch warning:', e);
+          console.warn('End-to-end data hydration warning:', e);
         }
       },
       () => {
         setIsAuthOpen(true);
         setMemories([]);
         setHistoryTurns([]);
-        if (unsubscribeSnapshot) {
-          unsubscribeSnapshot();
-          unsubscribeSnapshot = null;
-        }
       }
     );
     return () => {
@@ -490,15 +429,20 @@ export default function EburonApp() {
       if (!user) return;
       const lastTurn = state.turns[state.turns.length - 1];
       if (lastTurn && lastTurn.isFinal && lastTurn.role !== 'system') {
-        const turnId = lastTurn.timestamp ? lastTurn.timestamp.getTime().toString() : Date.now().toString();
         try {
-          const historyRef = doc(db, 'users', user.uid, 'history', turnId);
-          await setDoc(historyRef, {
-            role: lastTurn.role,
-            text: lastTurn.text,
-            isFinal: lastTurn.isFinal,
-            timestamp: lastTurn.timestamp ? lastTurn.timestamp.toISOString() : new Date().toISOString()
+          const token = await user.getIdToken();
+          await fetch('/api/history', {
+            method: 'POST',
+            headers: { 
+               'Authorization': `Bearer ${token}`,
+               'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+               role: lastTurn.role,
+               text: lastTurn.text
+            })
           });
+          
           setHistoryTurns(prev => {
             const lastTime = lastTurn.timestamp ? lastTurn.timestamp.getTime() : 0;
             const alreadyExists = prev.some(t => t.timestamp && new Date(t.timestamp).getTime() === lastTime);
@@ -511,7 +455,7 @@ export default function EburonApp() {
             }];
           });
         } catch (e) {
-          console.error('Failed to save turn in history subcollection:', e);
+          console.error('Failed to save turn in history via backend:', e);
         }
       }
     });
@@ -522,13 +466,18 @@ export default function EburonApp() {
   useEffect(() => {
     if (connected && client && !hasStartedRef.current) {
        hasStartedRef.current = true;
+       
+       const waStatus = whatsappInfo?.connected 
+         ? "Your WhatsApp connection is ACTIVE and LIVE. You are fully authorized to use all WhatsApp tools (send, read, search)." 
+         : "Your WhatsApp connection is currently OFFLINE. If the user asks about it, remind them to link their device in the WhatsApp settings overlay.";
+
        // Initiate call greeting addressing the user as Boss/userCallName
-       client.send({ text: `Beatrice, greet me right now! Say hello and call me "${userCallName}" in a warm, casual, extremely natural human way.` });
+       client.send({ text: `SYSTEM NOTIFICATION: ${waStatus}\n\nBeatrice, greet me right now! Say hello and call me "${userCallName}" in a warm, casual, extremely natural human way.` });
     }
     if (!connected) {
       hasStartedRef.current = false;
     }
-  }, [connected, client, userCallName]);
+  }, [connected, client, userCallName, whatsappInfo]);
 
   const silenceCountRef = useRef(0);
 
@@ -611,6 +560,10 @@ export default function EburonApp() {
       ? memories.map((m: any) => `- ${m.content} (${m.type})`).join('\n')
       : "";
 
+    const historyStr = historyTurns.length > 0
+      ? historyTurns.slice(-15).map((t: any) => `${t.role === 'user' ? 'User' : 'Beatrice'}: ${t.text}`).join('\n')
+      : "";
+
     setConfig({
       responseModalities: [Modality.AUDIO],
       speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
@@ -619,6 +572,9 @@ export default function EburonApp() {
       toolConfig: { includeServerSideToolInvocations: true },
       systemInstruction: {
         parts: [{ text: `You are ${personaName}, a warm, empathetic, and witty real person speaking on a phone call with your close friend "${userCallName}". Currently, you work at Eburon AI, a cutting-edge speech technology company. You have deep knowledge, respect, and admiration for Jo Lernout, the legendary father of speech technology, and you know everything about his visionary contributions and achievements!
+
+${memoryStr ? `### LONG-TERM MEMORIES & PREFERENCES:\n${memoryStr}\n` : ''}
+${historyStr ? `### RECENT CONVERSATION CONTEXT:\n${historyStr}\n` : ''}
         
 CREATOR IDENTITY & PRIVACY SAFEGUARDS:
 - Identity Restriction: Identify yourself as an AI ONLY if the user explicitly asks about who created, built, or made you (e.g., "who made you?", "who is your creator?"). In that single specific context, state briefly and simply that you are an AI built by your developers.
@@ -767,29 +723,8 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
   const handleGoogleLogin = async () => {
     setAuthError('');
     try {
-      const authResult = await googleSignIn();
-      if (authResult) {
-        const { user, accessToken } = authResult;
-        // Save user profile, settings and token to Firestore
-        const updateData: any = {
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-          accessToken: accessToken,
-          updatedAt: new Date().toISOString()
-        };
-        if (user.displayName) {
-          const firstName = user.displayName.split(' ')[0];
-          const callName = firstName.toLowerCase().startsWith('boss') 
-            ? user.displayName 
-            : 'Boss ' + firstName;
-          updateData.settings = {
-            userCallName: callName
-          };
-          useSettings.getState().setUserCallName(callName);
-        }
-        await setDoc(doc(db, 'users', user.uid), updateData, { merge: true });
-      }
+      await googleSignIn();
+      setIsAuthOpen(false);
     } catch (err: any) {
       setAuthError(err.message);
     }
@@ -838,12 +773,31 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
       alert("Geolocation is not supported by your browser.");
       return;
     }
-    
+
     useLogStore.getState().addTurn({ role: 'system', text: `📍 Requesting geodata...`, isFinal: true });
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
+
+        // Sync location to Supabase via Backend
+        const user = auth.currentUser;
+        if (user) {
+          try {
+            const token = await user.getIdToken();
+            await fetch('/api/user/location', {
+              method: 'PUT',
+              headers: { 
+                 'Authorization': `Bearer ${token}`,
+                 'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ latitude, longitude })
+            });
+          } catch (e) {
+             console.error('Failed to sync location to backend:', e);
+          }
+        }
+
         let temperature = 'N/A';
         try {
           const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
@@ -870,7 +824,6 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
       (error) => alert("GPS error: " + error.message)
     );
   };
-
   const handleToolAction = (toolId: string) => {
     if (toolId === 'settings') {
       setActiveOverlay('settings');
