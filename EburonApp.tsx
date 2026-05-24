@@ -133,6 +133,7 @@ export default function EburonApp() {
 
   // WhatsApp Integration states
   const [whatsappInfo, setWhatsappInfo] = useState<any>(null);
+  const [whatsappContacts, setWhatsappContacts] = useState<any[]>([]);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
 
   const fetchWhatsappStatus = async () => {
@@ -153,12 +154,32 @@ export default function EburonApp() {
       })
       .then(data => {
         setWhatsappInfo(data);
-        setWhatsappLoading(false);
+        if (data?.connected) {
+          fetchWhatsappContacts(token);
+        }
       })
       .catch(err => {
-        console.error("Error loading WhatsApp connectivity:", err);
+        console.error('Failed to fetch whatsapp status', err);
+      })
+      .finally(() => {
         setWhatsappLoading(false);
       });
+  };
+
+  const fetchWhatsappContacts = async (token: string) => {
+    try {
+      const res = await fetch('/api/whatsapp/contacts', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWhatsappContacts(data.contacts || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch whatsapp contacts', err);
+    }
   };
 
   useEffect(() => {
@@ -1893,6 +1914,69 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
                    Disconnect / Reconnect
                  </button>
                </div>
+             )}
+
+             {whatsappInfo?.connected && whatsappContacts && whatsappContacts.length > 0 && (
+                <div style={{ marginTop: '20px' }}>
+                  <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px', color: 'var(--text-color)' }}>
+                    Recent Contacts
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {whatsappContacts.map((contact, idx) => (
+                      <button
+                        key={idx}
+                        className="pill-btn"
+                        onClick={() => {
+                          const nameOrId = contact.name || contact.phone || contact.jid;
+                          const msg = `Please send a WhatsApp message to ${nameOrId}.`;
+                          if (connected) client.send({ text: msg });
+                          useLogStore.getState().addTurn({ role: 'user', text: msg, isFinal: true });
+                          setActiveOverlay(null);
+                        }}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '12px 16px',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '12px',
+                          backgroundColor: 'rgba(255,255,255,0.02)',
+                          cursor: 'pointer',
+                          textAlign: 'left'
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-color)', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {contact.name || 'Unknown Contact'}
+                            {contact.provider && (
+                               <span style={{ fontSize: '9px', textTransform: 'uppercase', padding: '2px 6px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', color: 'var(--text-muted)' }}>
+                                 {contact.provider}
+                               </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'monospace', marginBottom: '6px' }}>
+                            +{contact.phone}
+                          </div>
+                          {contact.lastMessage && (
+                            <div style={{ fontSize: '13px', color: 'var(--text-color)', opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              "{contact.lastMessage}"
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                          {contact.lastMessageAt && (
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                              {new Date(contact.lastMessageAt).toLocaleDateString()}
+                            </div>
+                          )}
+                          <div style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '12px', backgroundColor: 'rgba(37, 211, 102, 0.1)', color: '#25d366' }}>
+                            Message
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
              )}
 
            </div>
