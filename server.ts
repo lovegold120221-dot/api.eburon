@@ -14,9 +14,14 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const DIST_PATH = path.join(process.cwd(), 'dist');
 
 import QRCode from 'qrcode';
-import * as baileys from '@whiskeysockets/baileys';
-const makeWASocket = (typeof baileys.default === 'function') ? baileys.default : ((baileys as any).makeWASocket || baileys);
-const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = baileys;
+import * as baileysLib from '@whiskeysockets/baileys';
+
+const baileysAny = baileysLib as any;
+const makeWASocket = baileysLib.makeWASocket || baileysAny.default?.makeWASocket || baileysAny.default || baileysLib;
+const useMultiFileAuthState = baileysLib.useMultiFileAuthState || baileysAny.default?.useMultiFileAuthState;
+const DisconnectReason = baileysLib.DisconnectReason || baileysAny.default?.DisconnectReason;
+const fetchLatestBaileysVersion = baileysLib.fetchLatestBaileysVersion || baileysAny.default?.fetchLatestBaileysVersion;
+
 import Pino from 'pino';
 
 // Initialize Firebase Admin lazily
