@@ -49,10 +49,15 @@ export const whatsappTools: FunctionCall[] = [
   },
   {
     name: 'read_whatsapp_chats',
-    description: 'Retrieves the recent chats and their latest messages from the user\'s connected WhatsApp account.',
+    description: 'Retrieves the recent chats and their latest messages from the user\'s connected WhatsApp account. If a specific chat "jid" is provided, it retrieves the recent message history for that chat.',
     parameters: {
       type: 'OBJECT',
-      properties: {},
+      properties: {
+        jid: {
+          type: 'STRING',
+          description: 'Optional. The WhatsApp JID (e.g. 15551234567@s.whatsapp.net) to get the message history for a specific chat.'
+        }
+      },
     },
     isEnabled: true,
     scheduling: FunctionResponseScheduling.INTERRUPT,

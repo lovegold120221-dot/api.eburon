@@ -104,7 +104,8 @@ export const getWhatsappContacts = async (query?: string) => {
   return apiClient.get(url, token);
 };
 
-export const getWhatsappChats = async () => {
+export const getWhatsappChats = async (jid?: string) => {
   const token = await getToken();
-  return apiClient.get('/api/whatsapp/chats', token);
+  const url = jid ? `/api/whatsapp/chats?jid=${encodeURIComponent(jid)}` : '/api/whatsapp/chats';
+  return apiClient.get(url, token);
 };

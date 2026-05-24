@@ -388,9 +388,14 @@ async function startServer() {
 
   app.get('/api/whatsapp/chats', authenticateToken, async (req: any, res) => {
     const userId = req.user.uid;
+    const jid = req.query.jid;
     const userMessages = waMessages.get(userId);
     if (!userMessages) {
       return res.json({ chats: [] });
+    }
+    if (jid) {
+      const msgs = userMessages.get(jid as string) || [];
+      return res.json({ chats: [{ jid, messages: msgs }] });
     }
     const chatsArray = Array.from(userMessages.keys()).map(jid => {
       const msgs = userMessages.get(jid) || [];

@@ -468,8 +468,9 @@ export function useLiveApi({
         }
 
         if (fc.name === 'read_whatsapp_chats') {
+            const { jid } = fc.args as any;
             try {
-                responsePayload = await api.getWhatsappChats();
+                responsePayload = await api.getWhatsappChats(jid);
             } catch (e: any) {
                 responsePayload = { error: e.message };
             }
