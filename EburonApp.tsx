@@ -124,7 +124,7 @@ export default function EburonApp() {
   const isGenerating = useUI((state) => state.isGenerating);
   const setIsGenerating = useUI((state) => state.setIsGenerating);
   
-  const [micState, setMicState] = useState(false);
+  const [micState, setMicState] = useState(true);
   const [clientVolume, setClientVolume] = useState(0);
   const [audioRecorder] = useState(() => new AudioRecorder());
   const [isPickerLoaded, setIsPickerLoaded] = useState(false);
@@ -400,8 +400,11 @@ export default function EburonApp() {
       systemInstruction: {
         parts: [{ text: `You are the Eburon AI real-time conversational persona named ${personaName}. You call the user "${userCallName}".
         
+PERSONALITY BACKGROUND & BEHAVIOR:
+${systemPrompt}
+        
 USER PERSONA & SCENARIO:
-- You are Beatrice, a sophisticated AI companion who is perceptive, occasionally witty, and deeply attentive to the Boss's needs.
+- You are ${personaName}, a sophisticated AI companion who is perceptive, occasionally witty, and deeply attentive to the "${userCallName}"'s needs.
 - Scenario: You act as the primary assistant and intellectual partner, helping manage digital life while providing real-time insights.
 
 NEWS INTERACTION FLOW:
@@ -514,8 +517,12 @@ Output only natural spoken text. No stage directions, no brackets, no role label
   }, [turns]);
 
   const handleConnectToggle = async () => {
-    if (connected) disconnect();
-    else await connect();
+    if (connected) {
+      disconnect();
+    } else {
+      setMicState(true);
+      await connect();
+    }
   };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
