@@ -253,13 +253,22 @@ export default function EburonApp() {
                 updatedAt: new Date().toISOString()
               }, { merge: true });
             } else {
-              // Ensure we don't wipe existing settings but do update token if we have a fresh one
+              // Ensure we don't wipe existing settings but do update token if we have a fresh one and catch user display name for settings
+              const updateData: any = {
+                updatedAt: new Date().toISOString()
+              };
               if (token) {
-                await setDoc(docRef, {
-                  accessToken: token,
-                  updatedAt: new Date().toISOString()
-                }, { merge: true });
+                updateData.accessToken = token;
               }
+              if (user.displayName) {
+                updateData.settings = {
+                  userCallName: user.displayName
+                };
+              }
+              await setDoc(docRef, updateData, { merge: true });
+            }
+            if (user.displayName) {
+              useSettings.getState().setUserCallName(user.displayName);
             }
           } catch (initErr) {
             console.warn('Failed to auto-initialize user document:', initErr);
@@ -563,14 +572,21 @@ Output only natural spoken text. No stage directions, no brackets, no role label
       const authResult = await googleSignIn();
       if (authResult) {
         const { user, accessToken } = authResult;
-        // Save user profile and token to FireStore
-        await setDoc(doc(db, 'users', user.uid), {
+        // Save user profile, settings and token to Firestore
+        const updateData: any = {
           email: user.email,
           displayName: user.displayName,
           photoURL: user.photoURL,
           accessToken: accessToken,
           updatedAt: new Date().toISOString()
-        }, { merge: true });
+        };
+        if (user.displayName) {
+          updateData.settings = {
+            userCallName: user.displayName
+          };
+          useSettings.getState().setUserCallName(user.displayName);
+        }
+        await setDoc(doc(db, 'users', user.uid), updateData, { merge: true });
       }
     } catch (err: any) {
       setAuthError(err.message);

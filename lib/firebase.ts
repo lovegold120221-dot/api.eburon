@@ -118,15 +118,21 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
       console.warn('Failed to cache token to localStorage:', localStoreErr);
     }
 
-    // Securely persist Google OAuth user info & credentials in the user's Firestore document
+    // Securely persist Google OAuth user info, settings & credentials in the user's Firestore document
     try {
-      await setDoc(doc(db, 'users', result.user.uid), {
+      const updateData: any = {
         email: result.user.email,
         displayName: result.user.displayName,
         photoURL: result.user.photoURL,
         accessToken: cachedAccessToken,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      };
+      if (result.user.displayName) {
+        updateData.settings = {
+          userCallName: result.user.displayName
+        };
+      }
+      await setDoc(doc(db, 'users', result.user.uid), updateData, { merge: true });
     } catch (fsErr) {
       console.error('Failed to save authenticated user / token to Firestore of sign in:', fsErr);
     }
