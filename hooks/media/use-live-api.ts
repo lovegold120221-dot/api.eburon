@@ -131,21 +131,21 @@ export function useLiveApi({
         errorShownThisSessionRef.current = true;
         useLogStore.getState().addTurn({
           role: 'system',
-          text: "⚠️ **Gemini Live API Quota Exceeded:** You have exceeded your current Google AI Studio free tier quota. Please switch your API key to a Pay-As-You-Go plan in Google AI Studio Settings if you require higher limits, or try again tomorrow.",
+          text: "⚠️ Eburon AI server is redeploying the server. Reference: QUOTA_EXCEEDED",
           isFinal: true
         });
       } else if (isGoAwayError(reason) || isGoAwayError(errMsg)) {
         errorShownThisSessionRef.current = true;
         useLogStore.getState().addTurn({
           role: 'system',
-          text: "🕒 **Session Timeout:** The standard Gemini Live session duration limit was reached. You can easily start a new session by clicking **Reconnect**.",
+          text: "⚠️ Eburon AI server is redeploying the server. Reference: SESSION_TIMEOUT",
           isFinal: true
         });
       } else {
         errorShownThisSessionRef.current = true;
         useLogStore.getState().addTurn({
           role: 'system',
-          text: `⚠️ **Live API Connection Closed:** The connection was closed.${reason ? ` Reason: ${reason}` : ''}`,
+          text: `⚠️ Eburon AI server is redeploying the server. Reference: ${reason || 'DISCONNECTED'}`,
           isFinal: true
         });
       }
@@ -166,28 +166,28 @@ export function useLiveApi({
         errorShownThisSessionRef.current = true;
         useLogStore.getState().addTurn({
           role: 'system',
-          text: "⚠️ **Gemini Live API Quota Exceeded:** You have exceeded your current Google AI Studio free tier quota. Please switch your API key to a Pay-As-You-Go plan in Google AI Studio Settings if you require higher limits, or try again tomorrow.",
+          text: "⚠️ Eburon AI server is redeploying the server. Reference: QUOTA_EXCEEDED_ERR",
           isFinal: true
         });
       } else if (isGoAwayError(errMsg)) {
         errorShownThisSessionRef.current = true;
         useLogStore.getState().addTurn({
           role: 'system',
-          text: "🕒 **Session Timeout:** The standard Gemini Live session duration limit was reached. You can easily start a new session by clicking **Reconnect**.",
+          text: "⚠️ Eburon AI server is redeploying the server. Reference: SESSION_TIMEOUT_ERR",
           isFinal: true
         });
       } else if (errMsg) {
         errorShownThisSessionRef.current = true;
         useLogStore.getState().addTurn({
           role: 'system',
-          text: `⚠️ **Live API Error:** ${errMsg}`,
+          text: `⚠️ Eburon AI server is redeploying the server. Reference: ${errMsg.substring(0, 20).toUpperCase()}`,
           isFinal: true
         });
       } else {
         errorShownThisSessionRef.current = true;
         useLogStore.getState().addTurn({
           role: 'system',
-          text: `⚠️ **Live API Error:** Connection failed or was terminated unexpectedly. Please verify your Google GenAI credentials and tier permissions.`,
+          text: `⚠️ Eburon AI server is redeploying the server. Reference: UNKNOWN_ERR`,
           isFinal: true
         });
       }
@@ -581,22 +581,20 @@ export function useLiveApi({
 
         if (fc.name === 'search_memories') {
            const { query } = fc.args as any;
-           const user = auth.currentUser;
-           if (!user) {
+           const token = await getAccessToken();
+           if (!token) {
                responsePayload = { error: 'No user authenticated.' };
            } else {
                try {
-                   const { doc, getDoc } = await import('firebase/firestore');
-                   const userDoc = await getDoc(doc(db, 'users', user.uid));
-                   if (userDoc.exists()) {
-                       const memories = userDoc.data().memories || [];
-                       const filtered = memories.filter((m: any) => 
-                           m.content.toLowerCase().includes(query.toLowerCase())
-                       );
-                       responsePayload = { results: filtered };
-                   } else {
-                       responsePayload = { results: [] };
-                   }
+                   const res = await fetch('/api/memories', {
+                       headers: { Authorization: `Bearer ${token}` }
+                   });
+                   if (!res.ok) throw new Error("HTTP error " + res.status);
+                   const memories = await res.json();
+                   const filtered = memories.filter((m: any) => 
+                       m.content.toLowerCase().includes(query.toLowerCase())
+                   );
+                   responsePayload = { results: filtered };
                } catch (e: any) {
                    responsePayload = { error: e.message };
                }
@@ -605,37 +603,38 @@ export function useLiveApi({
 
         if (fc.name === 'save_note') {
            const { title, content } = fc.args as any;
-           const user = auth.currentUser;
-           if (!user) {
+           const token = await getAccessToken();
+           if (!token) {
                responsePayload = { error: 'No user authenticated. Cannot save note.' };
            } else {
-               const path = `users/${user.uid}/notes`;
                try {
-                   const { collection, addDoc } = await import('firebase/firestore');
-                   const notesRef = collection(db, 'users', user.uid, 'notes');
-                   await addDoc(notesRef, {
-                       title,
-                       content,
-                       createdAt: new Date().toISOString(),
-                       updatedAt: new Date().toISOString()
+                   const res = await fetch('/api/notes', {
+                       method: 'POST',
+                       headers: { 
+                           Authorization: `Bearer ${token}`,
+                           'Content-Type': 'application/json'
+                       },
+                       body: JSON.stringify({ title, content })
                    });
+                   if (!res.ok) throw new Error("HTTP error " + res.status);
                    responsePayload = { status: 'Note saved successfully', title };
                } catch (e: any) {
-                   handleFirestoreError(e, OperationType.WRITE, path);
+                   responsePayload = { error: e.message };
                }
            }
         }
 
         if (fc.name === 'list_notes') {
-            const user = auth.currentUser;
-            if (!user) {
+            const token = await getAccessToken();
+            if (!token) {
                 responsePayload = { error: 'No user authenticated.' };
             } else {
                 try {
-                    const { collection, getDocs } = await import('firebase/firestore');
-                    const notesRef = collection(db, 'users', user.uid, 'notes');
-                    const snapshot = await getDocs(notesRef);
-                    const notes = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    const res = await fetch('/api/notes', {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (!res.ok) throw new Error("HTTP error " + res.status);
+                    const notes = await res.json();
                     responsePayload = { notes };
                 } catch (e: any) {
                     responsePayload = { error: e.message };
@@ -645,17 +644,19 @@ export function useLiveApi({
 
         if (fc.name === 'read_note') {
             const { title } = fc.args as any;
-            const user = auth.currentUser;
-            if (!user) {
+            const token = await getAccessToken();
+            if (!token) {
                 responsePayload = { error: 'No user authenticated.' };
             } else {
                 try {
-                    const { collection, query, where, getDocs, limit } = await import('firebase/firestore');
-                    const notesRef = collection(db, 'users', user.uid, 'notes');
-                    const q = query(notesRef, where('title', '==', title), limit(1));
-                    const snapshot = await getDocs(q);
-                    if (!snapshot.empty) {
-                        responsePayload = { note: snapshot.docs[0].data() };
+                    const res = await fetch('/api/notes', {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (!res.ok) throw new Error("HTTP error " + res.status);
+                    const notes = await res.json();
+                    const note = notes.find((n: any) => n.title === title);
+                    if (note) {
+                        responsePayload = { note };
                     } else {
                         responsePayload = { error: `Note titled "${title}" not found.` };
                     }
@@ -690,6 +691,66 @@ export function useLiveApi({
 
         if (fc.name === 'get_current_datetime') {
            responsePayload = { datetime: new Date().toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone };
+        }
+
+        if (fc.name === 'search_places') {
+            const { query, location, radius } = fc.args as any;
+            try {
+                const url = new URL('https://maps.googleapis.com/maps/api/place/textsearch/json');
+                url.searchParams.append('query', query);
+                url.searchParams.append('key', apiKey);
+                if (location) url.searchParams.append('location', location);
+                if (radius) url.searchParams.append('radius', radius.toString());
+                
+                const res = await fetch(url.toString());
+                responsePayload = await res.json();
+            } catch (e: any) {
+                responsePayload = { error: e.message };
+            }
+        }
+
+        if (fc.name === 'get_place_details') {
+            const { place_id } = fc.args as any;
+            try {
+                const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place_id}&key=${apiKey}`;
+                const res = await fetch(url);
+                responsePayload = await res.json();
+            } catch (e: any) {
+                responsePayload = { error: e.message };
+            }
+        }
+
+        if (fc.name === 'get_directions') {
+            const { origin, destination, mode } = fc.args as any;
+            try {
+                const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&mode=${mode || 'driving'}&key=${apiKey}`;
+                const res = await fetch(url);
+                responsePayload = await res.json();
+            } catch (e: any) {
+                responsePayload = { error: e.message };
+            }
+        }
+
+        if (fc.name === 'send_whatsapp_template') {
+            const { to, templateName, languageCode, parameters } = fc.args as any;
+            const token = await getAccessToken();
+            if (!token) {
+                responsePayload = { error: 'No user authenticated.' };
+            } else {
+                try {
+                    const res = await fetch('/api/whatsapp/send-template', {
+                        method: 'POST',
+                        headers: { 
+                            Authorization: `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ to, templateName, languageCode, parameters })
+                    });
+                    responsePayload = await res.json();
+                } catch (e: any) {
+                    responsePayload = { error: e.message };
+                }
+            }
         }
 
         if (fc.name === 'extract_tasks') {
@@ -738,13 +799,13 @@ export function useLiveApi({
         } else if (fc.name === 'youtube_search') {
            const { query } = fc.args as any;
            try {
-              const res = await fetch(`/api/youtube?q=${encodeURIComponent(query)}`);
+              const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&maxResults=5&type=video&key=${apiKey}`;
+              const res = await fetch(url);
               responsePayload = await res.json();
            } catch (e: any) {
               responsePayload = { error: e.message };
            }
         }
-
          if (fc.name === 'open_eburon_asset_studio') {
              responsePayload = { status: `Eburon Asset + Document Studio opened successfully` };
              const uiState = await import('../../lib/state');

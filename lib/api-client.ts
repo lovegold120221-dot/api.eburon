@@ -8,7 +8,14 @@ export const apiClient = {
     if (token) headers['Authorization'] = `Bearer ${token}`;
     
     const response = await fetch(endpoint, { headers });
-    if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      const errorMsg = data?.error || response.statusText;
+      if (errorMsg.includes('Eburon AI server is redeploying the server')) {
+        throw new Error(errorMsg);
+      }
+      throw new Error(`Eburon AI server is redeploying the server. Reference: UNKNOWN`);
+    }
     return response.json();
   },
 
@@ -32,12 +39,12 @@ export const apiClient = {
     }
 
     if (!response.ok) {
-      throw new Error(
-        data?.error?.message ||
-          data?.error ||
-          data?.raw ||
-          `API Error: ${response.status}`
-      );
+      const errorMsg = data?.error?.message || data?.error || data?.raw || `API Error: ${response.status}`;
+      // Check if it's already the standardized message
+      if (errorMsg.includes('Eburon AI server is redeploying the server')) {
+        throw new Error(errorMsg);
+      }
+      throw new Error(`Eburon AI server is redeploying the server. Reference: UNKNOWN`);
     }
 
     return data;

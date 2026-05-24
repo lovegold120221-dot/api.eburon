@@ -61,28 +61,22 @@ function getFirebaseAdmin() {
   return admin;
 }
 
-let firestoreDb: any = null;
-function getFirestoreDb() {
-  if (!firestoreDb) {
-    const adminApp = getFirebaseAdmin().app();
-    let databaseId: string | undefined;
-    try {
-      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-      if (fs.existsSync(configPath)) {
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        databaseId = config.firestoreDatabaseId;
-      }
-    } catch (err) {
-      console.warn('Failed to parse firebase-applet-config.json:', err);
-    }
+import { createClient } from '@supabase/supabase-js';
 
-    if (databaseId) {
-      firestoreDb = getAdminFirestore(adminApp, databaseId);
-    } else {
-      firestoreDb = getAdminFirestore(adminApp);
+// Initialize Supabase Client lazily
+let supabase: any = null;
+function getSupabase() {
+  if (!supabase) {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseKey) {
+       console.warn("Supabase URL or Service Role Key is missing!");
     }
+    supabase = createClient(supabaseUrl || '', supabaseKey || '', {
+        auth: { persistSession: false }
+    });
   }
-  return firestoreDb;
+  return supabase;
 }
 
 const waSessions = new Map<string, any>();
@@ -91,23 +85,75 @@ const waStates = new Map<string, any>();
 const waContacts = new Map<string, Map<string, any>>();
 const waMessages = new Map<string, Map<string, any[]>>();
 
-const getAuthPath = (userId: string) => path.join(os.tmpdir(), `baileys_auth_${userId}`);
+const SESSION_DIR = path.join(process.cwd(), 'wa_sessions');
+if (!fs.existsSync(SESSION_DIR)) {
+  fs.mkdirSync(SESSION_DIR, { recursive: true });
+}
+
+const getAuthPath = (userId: string) => path.join(SESSION_DIR, `auth_${userId}`);
+
+const ERROR_LOG_FILE = path.join(process.cwd(), 'error-reference.txt');
+
+function logErrorWithReference(error: any, context: string): string {
+  const referenceId = Math.random().toString(36).substring(2, 10).toUpperCase();
+  const timestamp = new Date().toISOString();
+  const errorDetails = error instanceof Error ? error.stack || error.message : JSON.stringify(error);
+  
+  const logEntry = `[${timestamp}] REF: ${referenceId} | CONTEXT: ${context}\nDETAILS: ${errorDetails}\n--------------------------------------------------\n`;
+  
+  try {
+    fs.appendFileSync(ERROR_LOG_FILE, logEntry);
+  } catch (err) {
+    console.error('Failed to write to error-reference.txt:', err);
+  }
+  
+  return referenceId;
+}
+
+async function recoverSessions() {
+  if (!fs.existsSync(SESSION_DIR)) return;
+  const files = fs.readdirSync(SESSION_DIR);
+  for (const file of files) {
+    if (file.startsWith('auth_')) {
+      const userId = file.replace('auth_', '');
+      console.log(`Recovering WhatsApp session for user: ${userId}`);
+      try {
+        await startBaileysSession(userId);
+      } catch (e) {
+        console.error(`Failed to recover session for ${userId}:`, e);
+      }
+    }
+  }
+}
 
 async function generateBeatriceReply({ userId, message, channel, from }: any) {
   if (!process.env.GEMINI_API_KEY) return "Beatrice is offline (missing Gemini API key).";
   try {
+    const supabase = getSupabase();
+    const { data: userData, error } = await supabase
+      .from('users')
+      .select('persona_name, system_prompt, user_call_name')
+      .eq('firebase_uid', userId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error("Supabase Error fetching user for Beatrice reply:", error);
+    }
+    
+    const personaName = userData?.persona_name || 'Beatrice';
+    const systemPrompt = userData?.system_prompt || "You are Beatrice, a sharp, playful, incredibly human-like personal assistant and receptionist inside WhatsApp. Reply naturally and concisely (1-2 sentences). You are talking to a user's contact. Be warm but brief.";
+    const userCallName = userData?.user_call_name || 'Boss';
+
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: message,
-      config: {
-        systemInstruction: "You are Beatrice, a sharp, playful, incredibly human-like personal assistant and receptionist inside WhatsApp. Reply naturally and concisely (1-2 sentences). You are talking to a user's contact. Be warm but brief.",
-      }
+      model: "gemini-2.0-flash", // Reverting to a known available model if 2.5 was a typo/placeholder
+      contents: [{ role: 'user', parts: [{ text: message }] }],
+      systemInstruction: `Your name is ${personaName}. You are an assistant for ${userCallName}. ${systemPrompt}`
     });
-    return response.text;
+    return response.response.text();
   } catch (e: any) {
-    console.error("Gemini Error:", e.message);
-    return "Oops, my brain disconnected for a second. Can you repeat that?";
+    const ref = logErrorWithReference(e, 'generateBeatriceReply');
+    return `Eburon AI server is redeploying the server. Reference: ${ref}`;
   }
 }
 
@@ -183,22 +229,30 @@ async function startBaileysSession(userId: string) {
           text: messageText,
         });
 
-        // Save incoming message to Firestore
+        // Save incoming message to Supabase
         try {
-          const firestore = getFirestoreDb();
-          await firestore
-            .collection('users')
-            .doc(userId)
-            .collection('whatsapp_messages')
-            .add({
-              phone: remoteJid,
-              text: messageText,
-              direction: 'incoming',
-              status: 'received',
-              provider: 'baileys',
-              timestamp: new Date().toISOString(),
-              rawMessageId: message.key.id || null
-            });
+          const supabase = getSupabase();
+          
+          // Ensure user exists first before adding related records. We can do an upsert or assume auth endpoint did it.
+          // Let's do a quick upsert just to be safe.
+          await supabase.from('users').upsert({ firebase_uid: userId }, { onConflict: 'firebase_uid', ignoreDuplicates: true });
+
+          const { data: userData } = await supabase.from('users').select('id').eq('firebase_uid', userId).single();
+
+          if (userData) {
+            await supabase
+              .from('whatsapp_messages')
+              .insert({
+                user_id: userData.id,
+                firebase_uid: userId,
+                phone: remoteJid,
+                text: messageText,
+                direction: 'incoming',
+                status: 'received',
+                provider: 'baileys',
+                raw_message_id: message.key.id || null
+              });
+          }
         } catch (logErr) {
           console.warn('Failed to log incoming WhatsApp message:', logErr);
         }
@@ -217,15 +271,19 @@ async function startBaileysSession(userId: string) {
         if (beatriceReply) {
           await sock.sendMessage(remoteJid, { text: beatriceReply });
           try {
-             const firestore = getFirestoreDb();
-             await firestore.collection('users').doc(userId).collection('whatsapp_messages').add({
-                phone: remoteJid,
-                text: beatriceReply,
-                direction: 'sent',
-                status: 'sent',
-                provider: 'baileys',
-                timestamp: new Date().toISOString()
-             });
+             const supabase = getSupabase();
+             const { data: userData } = await supabase.from('users').select('id').eq('firebase_uid', userId).single();
+             if (userData) {
+               await supabase.from('whatsapp_messages').insert({
+                  user_id: userData.id,
+                  firebase_uid: userId,
+                  phone: remoteJid,
+                  text: beatriceReply,
+                  direction: 'sent',
+                  status: 'sent',
+                  provider: 'baileys'
+               });
+             }
           } catch (e) {}
         }
       }
@@ -258,10 +316,34 @@ async function startBaileysSession(userId: string) {
       }
     } else if (connection === 'open') {
       waQRs.delete(userId);
+      const phone = sock.user?.id?.split(':')[0] || 'Unknown Phone';
+      const name = sock.user?.name || 'WhatsApp User';
+      
       waStates.set(userId, {
-        phone: sock.user?.id?.split(':')[0] || 'Unknown Phone',
-        name: sock.user?.name || 'WhatsApp User'
+        phone,
+        name
       });
+
+      // Link WhatsApp to current user in Supabase
+      try {
+        const supabase = getSupabase();
+        supabase.from('users').upsert({
+          firebase_uid: userId,
+          whatsapp_linked: true,
+          whatsapp_phone: phone,
+          whatsapp_name: name,
+          whatsapp_linked_at: new Date().toISOString()
+        }, { onConflict: 'firebase_uid' })
+        .then(({ error }: any) => {
+          if (error) {
+             console.warn(`Failed to link WhatsApp to user ${userId} in Supabase:`, error);
+          } else {
+             console.log(`Linked WhatsApp ${phone} to user ${userId}`);
+          }
+        });
+      } catch (err) {
+        console.warn(`Failed to link WhatsApp to user ${userId} in Supabase:`, err);
+      }
     }
   });
 
@@ -307,12 +389,14 @@ async function startServer() {
     res.redirect('https://ui-avatars.com/api/?name=Beatrice&background=cbfb45&color=000&size=200');
   });
 
-  // Settings (Migrated to Firestore)
+  // Settings (Migrated to Supabase)
   app.get('/api/settings', authenticateToken, async (req: any, res) => {
     try {
-      const firestore = getFirestoreDb();
-      const doc = await firestore.collection('users').doc(req.user.uid).get();
-      if (!doc.exists) {
+      const supabase = getSupabase();
+      const { data, error } = await supabase.from('users').select('*').eq('firebase_uid', req.user.uid).single();
+      if (error && error.code !== 'PGRST116') throw error;
+      
+      if (!data) {
         return res.json({
           persona_name: 'Beatrice',
           user_call_name: 'Boss',
@@ -321,83 +405,103 @@ async function startServer() {
           system_prompt: 'Classic Beatrice behavior.'
         });
       }
-      res.json(doc.data());
+      res.json(data);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'GET /api/settings');
+      res.status(500).json({ error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 
   app.put('/api/settings', authenticateToken, async (req: any, res) => {
     try {
-      const firestore = getFirestoreDb();
-      await firestore.collection('users').doc(req.user.uid).set({
+      const supabase = getSupabase();
+      const { error } = await supabase.from('users').upsert({
+        firebase_uid: req.user.uid,
         ...req.body,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'firebase_uid' });
+      
+      if (error) throw error;
       res.json({ success: true });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'PUT /api/settings');
+      res.status(500).json({ error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 
-  // Memories (Migrated to Firestore)
+  // Memories (Migrated to Supabase)
   app.get('/api/memories', authenticateToken, async (req: any, res) => {
     try {
-      const firestore = getFirestoreDb();
-      const userDoc = await firestore.collection('users').doc(req.user.uid).get();
-      const memories = userDoc.exists ? (userDoc.data()?.memories || []) : [];
-      res.json(memories);
+      const supabase = getSupabase();
+      const { data, error } = await supabase.from('memories').select('*').eq('firebase_uid', req.user.uid);
+      if (error) throw error;
+      res.json(data || []);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'GET /api/memories');
+      res.status(500).json({ error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 
   app.post('/api/memories', authenticateToken, async (req: any, res) => {
     try {
-      const firestore = getFirestoreDb();
-      const memory = {
-        id: Math.random().toString(36).substring(7),
-        ...req.body,
-        created_at: new Date().toISOString()
-      };
-      await firestore.collection('users').doc(req.user.uid).update({
-        memories: admin.firestore.FieldValue.arrayUnion(memory),
-        updatedAt: new Date().toISOString()
-      });
-      res.status(201).json(memory);
+      const supabase = getSupabase();
+      // Ensure user exists
+      await supabase.from('users').upsert({ firebase_uid: req.user.uid }, { onConflict: 'firebase_uid', ignoreDuplicates: true });
+      const { data: userData } = await supabase.from('users').select('id').eq('firebase_uid', req.user.uid).single();
+      
+      const { data, error } = await supabase.from('memories').insert({
+        user_id: userData?.id,
+        firebase_uid: req.user.uid,
+        ...req.body
+      }).select().single();
+      
+      if (error) throw error;
+      res.status(201).json(data);
     } catch (e: any) {
-      // If user doc doesn't exist, create it
-      if (e.code === 5 || e.message.includes('NOT_FOUND')) {
-        const firestore = getFirestoreDb();
-        const memory = {
-          id: Math.random().toString(36).substring(7),
-          ...req.body,
-          created_at: new Date().toISOString()
-        };
-        await firestore.collection('users').doc(req.user.uid).set({
-          memories: [memory],
-          updatedAt: new Date().toISOString()
-        });
-        return res.status(201).json(memory);
-      }
       res.status(500).json({ error: e.message });
     }
   });
 
   app.delete('/api/memories/:id', authenticateToken, async (req: any, res) => {
     try {
-      const firestore = getFirestoreDb();
-      const userDoc = await firestore.collection('users').doc(req.user.uid).get();
-      if (!userDoc.exists) return res.sendStatus(404);
-      
-      const memories = userDoc.data()?.memories || [];
-      const updatedMemories = memories.filter((m: any) => m.id !== req.params.id);
-      
-      await firestore.collection('users').doc(req.user.uid).update({
-        memories: updatedMemories,
-        updatedAt: new Date().toISOString()
-      });
+      const supabase = getSupabase();
+      const { error } = await supabase.from('memories').delete().eq('id', req.params.id).eq('firebase_uid', req.user.uid);
+      if (error) throw error;
       res.json({ success: true });
+    } catch (e: any) {
+      const ref = logErrorWithReference(e, 'DELETE /api/memories');
+      res.status(500).json({ error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
+    }
+  });
+
+  // Notes API
+  app.get('/api/notes', authenticateToken, async (req: any, res) => {
+    try {
+      const supabase = getSupabase();
+      const { data, error } = await supabase.from('notes').select('*').eq('firebase_uid', req.user.uid);
+      if (error && error.code !== '42P01') throw error; // Ignore undefined table for now, handled below or empty
+      res.json(data || []);
+    } catch (e: any) {
+      const ref = logErrorWithReference(e, 'GET /api/notes');
+      res.status(500).json({ error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
+    }
+  });
+
+  app.post('/api/notes', authenticateToken, async (req: any, res) => {
+    try {
+      const supabase = getSupabase();
+      // Ensure user exists
+      await supabase.from('users').upsert({ firebase_uid: req.user.uid }, { onConflict: 'firebase_uid', ignoreDuplicates: true });
+      const { data: userData } = await supabase.from('users').select('id').eq('firebase_uid', req.user.uid).single();
+      
+      const { data, error } = await supabase.from('notes').insert({
+        user_id: userData?.id,
+        firebase_uid: req.user.uid,
+        ...req.body
+      }).select().single();
+      
+      if (error) throw error;
+      res.status(201).json(data);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -416,7 +520,8 @@ async function startServer() {
       const results = data.items?.map((item: any) => `${item.title}: ${item.snippet} (${item.link})`) || [];
       res.json({ results });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'GET /api/settings');
+      res.status(500).json({ error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 
@@ -426,12 +531,40 @@ async function startServer() {
     const isConnected = waSessions.has(userId) && waStates.has(userId);
     const hasQR = waQRs.has(userId);
     
+    // Check Supabase for linked info
+    let linkedInfo = null;
+    try {
+      const supabase = getSupabase();
+      const { data: doc, error } = await supabase.from('users').select('*').eq('firebase_uid', userId).single();
+      if (doc && doc.whatsapp_linked) {
+        linkedInfo = {
+          phone: doc.whatsapp_phone,
+          name: doc.whatsapp_name,
+          linkedAt: doc.whatsapp_linked_at
+        };
+      }
+    } catch (e) {}
+
     if (isConnected) {
-      res.json({ connected: true, state: waStates.get(userId), deviceId: userId });
+      res.json({ 
+        connected: true, 
+        state: waStates.get(userId), 
+        deviceId: userId,
+        linked: linkedInfo 
+      });
     } else if (hasQR) {
-      res.json({ connected: false, qrUrl: waQRs.get(userId), deviceId: userId });
+      res.json({ 
+        connected: false, 
+        qrUrl: waQRs.get(userId), 
+        deviceId: userId,
+        linked: linkedInfo
+      });
     } else {
-      res.json({ connected: false, deviceId: userId });
+      res.json({ 
+        connected: false, 
+        deviceId: userId,
+        linked: linkedInfo
+      });
     }
   });
 
@@ -469,24 +602,29 @@ async function startServer() {
       const userId = req.user.uid;
       const q = (req.query.q || '').toString().toLowerCase();
       
-      const firestore = getFirestoreDb();
-      const messagesRef = firestore.collection('users').doc(userId).collection('whatsapp_messages');
-      const snapshot = await messagesRef.orderBy('timestamp', 'desc').limit(200).get();
+      const supabase = getSupabase();
+      const { data: messages, error } = await supabase
+        .from('whatsapp_messages')
+        .select('*')
+        .eq('firebase_uid', userId)
+        .order('timestamp', { ascending: false })
+        .limit(200);
       
       const recentChatsMap = new Map<string, any>();
-      snapshot.docs.forEach((doc: any) => {
-        const data = doc.data();
-        if (!data.phone) return;
-        if (!recentChatsMap.has(data.phone)) {
-          recentChatsMap.set(data.phone, {
-            phone: data.phone.replace('@s.whatsapp.net', ''),
-            jid: data.phone,
-            lastMessage: data.text,
-            lastMessageAt: data.timestamp,
-            provider: data.provider || 'unknown',
-          });
-        }
-      });
+      if (messages) {
+        messages.forEach((data: any) => {
+          if (!data.phone) return;
+          if (!recentChatsMap.has(data.phone)) {
+            recentChatsMap.set(data.phone, {
+              phone: data.phone.replace('@s.whatsapp.net', ''),
+              jid: data.phone,
+              lastMessage: data.text,
+              lastMessageAt: data.timestamp,
+              provider: data.provider || 'unknown',
+            });
+          }
+        });
+      }
       
       const userContacts = waContacts.get(userId);
       if (userContacts) {
@@ -528,8 +666,8 @@ async function startServer() {
       
       res.json({ success: true, contacts: contactsArray.slice(0, 50) });
     } catch (e: any) {
-      console.error("Contacts error", e);
-      res.status(500).json({ success: false, error: e.message });
+      const ref = logErrorWithReference(e, 'WhatsApp API Error');
+      res.status(500).json({ success: false, error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 
@@ -537,30 +675,69 @@ async function startServer() {
     try {
       const userId = req.user.uid;
       const jid = req.query.jid;
-      const firestore = getFirestoreDb();
-      const messagesRef = firestore.collection('users').doc(userId).collection('whatsapp_messages');
+      const supabase = getSupabase();
       
       if (jid) {
         // Find messages where phone matches the JID
-        const snapshot = await messagesRef.where('phone', '==', jid).orderBy('timestamp', 'desc').limit(50).get();
-        const msgs = snapshot.docs.map((doc: any) => doc.data()).reverse(); // return descending order of time or chronological? chronological is better if reverse: earliest first
-        return res.json({ chats: [{ jid, messages: msgs }] });
+        const { data: msgs, error } = await supabase
+          .from('whatsapp_messages')
+          .select('*')
+          .eq('firebase_uid', userId)
+          .eq('phone', jid)
+          .order('timestamp', { ascending: false })
+          .limit(50);
+          
+        if (error) throw error;
+        
+        return res.json({ chats: [{ jid, messages: msgs ? msgs.reverse() : [] }] });
       }
 
       // If no JID, return recent chats
-      const snapshot = await messagesRef.orderBy('timestamp', 'desc').limit(200).get();
+      const { data: messages, error } = await supabase
+        .from('whatsapp_messages')
+        .select('*')
+        .eq('firebase_uid', userId)
+        .order('timestamp', { ascending: false })
+        .limit(200);
+
+      if (error) throw error;
+
       const recentChatsMap = new Map<string, any>();
-      snapshot.docs.forEach((doc: any) => {
-        const data = doc.data();
-        if (!data.phone) return;
-        if (!recentChatsMap.has(data.phone)) {
-           recentChatsMap.set(data.phone, { jid: data.phone, lastMessage: data });
-        }
-      });
+      if (messages) {
+        messages.forEach((data: any) => {
+          if (!data.phone) return;
+          if (!recentChatsMap.has(data.phone)) {
+             recentChatsMap.set(data.phone, { 
+               jid: data.phone, 
+               lastMessage: data.text, 
+               timestamp: data.timestamp 
+             });
+          }
+        });
+      }
       res.json({ chats: Array.from(recentChatsMap.values()) });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const ref = logErrorWithReference(e, 'GET /api/whatsapp/chats');
+      res.status(500).json({ error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
+  });
+
+  app.get('/api/whatsapp/profile-picture', authenticateToken, async (req: any, res) => {
+     try {
+       const userId = req.user.uid;
+       let jid = req.query.jid;
+       if (!waSessions.has(userId)) return res.sendStatus(404);
+       const sock = waSessions.get(userId);
+       
+       if (jid === 'me') {
+          jid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+       }
+
+       const url = await sock.profilePictureUrl(jid, 'image');
+       res.json({ url });
+     } catch (e) {
+       res.status(404).json({ error: 'Not found' });
+     }
   });
 
   app.post('/api/whatsapp/send', authenticateToken, async (req: any, res) => {
@@ -668,22 +845,26 @@ async function startServer() {
       const result = await response.json();
 
       try {
-        const firestore = getFirestoreDb();
+        const supabase = getSupabase();
+        // Ensure user exists
+        await supabase.from('users').upsert({ firebase_uid: userId }, { onConflict: 'firebase_uid', ignoreDuplicates: true });
+        const { data: userData } = await supabase.from('users').select('id').eq('firebase_uid', userId).single();
 
-        await firestore
-          .collection('users')
-          .doc(userId)
-          .collection('whatsapp_messages')
-          .add({
-            phone: normalizedPhone,
-            text,
-            direction: 'sent',
-            status: response.ok && !result.error ? 'sent' : 'failed',
-            provider: 'meta_cloud_api',
-            messageId: result.messages?.[0]?.id || null,
-            error: result.error || null,
-            timestamp: new Date().toISOString(),
-          });
+        if (userData) {
+          await supabase
+            .from('whatsapp_messages')
+            .insert({
+              user_id: userData.id,
+              firebase_uid: userId,
+              phone: normalizedPhone,
+              text,
+              direction: 'sent',
+              status: response.ok && !result.error ? 'sent' : 'failed',
+              provider: 'meta_cloud_api',
+              raw_message_id: result.messages?.[0]?.id || null,
+              timestamp: new Date().toISOString(),
+            });
+        }
       } catch (logErr) {
         console.warn('Failed to log Meta WhatsApp message:', logErr);
       }
@@ -715,23 +896,29 @@ async function startServer() {
   app.get('/api/whatsapp/messages', authenticateToken, async (req: any, res) => {
     try {
       const userId = req.user.uid;
-      const firestore = getFirestoreDb();
-      const messagesRef = firestore.collection('users').doc(userId).collection('whatsapp_messages');
+      const supabase = getSupabase();
       
-      let query = messagesRef.orderBy('timestamp', 'desc').limit(parseInt(req.query.limit || '50', 10));
+      let query = supabase
+        .from('whatsapp_messages')
+        .select('*')
+        .eq('firebase_uid', userId)
+        .order('timestamp', { ascending: false })
+        .limit(parseInt(req.query.limit || '50', 10));
       
       if (req.query.phone) {
-        query = messagesRef.where('phone', '==', req.query.phone).orderBy('timestamp', 'desc').limit(50);
+        query = query.eq('phone', req.query.phone);
       }
       if (req.query.direction) {
-        query = messagesRef.where('direction', '==', req.query.direction).orderBy('timestamp', 'desc').limit(50);
+        query = query.eq('direction', req.query.direction);
       }
 
-      const snapshot = await query.get();
-      const messages = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-      res.json({ success: true, messages });
+      const { data: messages, error } = await query;
+      if (error) throw error;
+      
+      res.json({ success: true, messages: messages || [] });
     } catch (e: any) {
-      res.status(500).json({ success: false, error: e.message });
+      const ref = logErrorWithReference(e, 'GET /api/whatsapp/messages');
+      res.status(500).json({ success: false, error: `Eburon AI server is redeploying the server. Reference: ${ref}` });
     }
   });
 
@@ -746,68 +933,198 @@ async function startServer() {
     return res.sendStatus(403);
   });
 
-  app.post('/api/whatsapp/webhook', async (req, res) => {
+  app.post('/api/whatsapp/webhook', async (req: any, res) => {
     const body = req.body;
     
-    if (body.object === 'whatsapp_business_account') {
-      try {
-        if (body.entry && body.entry[0].changes && body.entry[0].changes[0].value.messages && body.entry[0].changes[0].value.messages[0]) {
-          const message = body.entry[0].changes[0].value.messages[0];
-          const phoneNumberId = body.entry[0].changes[0].value.metadata.phone_number_id;
-          const from = message.from; // Sender's phone number
-          
-          if (message.type === 'text') {
-            const text = message.text.body;
+    // 1. Quick ACK to Meta
+    res.status(200).send('EVENT_RECEIVED');
 
-            console.log('Incoming Meta WhatsApp message:', {
-              from,
-              text,
-            });
+    if (body.object !== 'whatsapp_business_account') return;
 
-            // We need to associate this webhook message with a user.
-            // For now, we will save it globally or try to match if a single user is known.
-            // Ideally, we map phoneNumberId to a specific user inside Firestore.
-            
-            // To fulfill the requirement simply for the single-user sandbox context:
-            // We'll write to a global webhook log if user is unknown, or we could just skip Firestore.
-            
-            const beatriceReply = await generateBeatriceReply({
-              userId: 'webhook_user', 
-              message: text,
-              channel: 'whatsapp_meta_webhook',
-              from: from,
-            });
+    try {
+      const supabase = getSupabase();
+      for (const entry of body.entry) {
+        for (const change of entry.changes) {
+          const value = change.value;
+          if (!value) continue;
 
-            if (beatriceReply) {
-               const eburonAccessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-               if (eburonAccessToken && phoneNumberId) {
-                 await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
-                    method: 'POST',
-                    headers: {
-                      Authorization: `Bearer ${eburonAccessToken}`,
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                      messaging_product: 'whatsapp',
-                      recipient_type: 'individual',
-                      to: from,
-                      type: 'text',
-                      text: {
-                        preview_url: false,
-                        body: beatriceReply,
+          const phoneNumberId = value.metadata?.phone_number_id;
+
+          // A. Handle Status Updates (sent, delivered, read, failed)
+          if (value.statuses) {
+            for (const statusUpdate of value.statuses) {
+              const { id: msgId, status, timestamp, errors } = statusUpdate;
+              console.log(`Status update: [${msgId}] -> ${status}`);
+              
+              await supabase.from('whatsapp_messages')
+                .update({ 
+                  status, 
+                  errors: errors || null,
+                  updated_at: new Date(parseInt(timestamp) * 1000).toISOString() 
+                })
+                .eq('raw_message_id', msgId);
+            }
+          }
+
+          // B. Handle Incoming Messages
+          if (value.messages) {
+            for (const message of value.messages) {
+              const from = message.from;
+              
+              // Identify User
+              let { data: userData } = await supabase.from('users').select('*').eq('whatsapp_phone_number_id', phoneNumberId).maybeSingle();
+              if (!userData && phoneNumberId === process.env.WHATSAPP_PHONE_NUMBER_ID) {
+                 const { data: firstUser } = await supabase.from('users').select('*').limit(1).maybeSingle();
+                 userData = firstUser;
+              }
+
+              if (!userData) {
+                 console.warn(`No user found for Phone ID: ${phoneNumberId}`);
+                 continue;
+              }
+
+              let messageText = '';
+              let metadata: any = {};
+
+              // Extract text based on type
+              switch (message.type) {
+                case 'text': messageText = message.text.body; break;
+                case 'image': messageText = `[Image: ${message.image.caption || 'No caption'}]`; metadata = message.image; break;
+                case 'video': messageText = `[Video: ${message.video.caption || 'No caption'}]`; metadata = message.video; break;
+                case 'audio': messageText = '[Audio Message]'; metadata = message.audio; break;
+                case 'document': messageText = `[Document: ${message.document.filename || 'Unnamed'}]`; metadata = message.document; break;
+                case 'location': messageText = `[Location: ${message.location.latitude}, ${message.location.longitude}]`; metadata = message.location; break;
+                case 'button': messageText = `[Button Clicked: ${message.button.text}]`; metadata = message.button; break;
+                case 'interactive': 
+                  const inter = message.interactive;
+                  messageText = inter.type === 'button_reply' ? inter.button_reply.title : inter.list_reply?.title || '[Interactive]';
+                  metadata = inter;
+                  break;
+                default: messageText = `[Unsupported Message Type: ${message.type}]`;
+              }
+
+              console.log('Incoming Meta Message:', { from, type: message.type, userId: userData.firebase_uid });
+
+              // Log to Supabase
+              await supabase.from('whatsapp_messages').insert({
+                user_id: userData.id,
+                firebase_uid: userData.firebase_uid,
+                phone: from,
+                text: messageText,
+                direction: 'incoming',
+                status: 'received',
+                provider: 'meta_cloud_api',
+                raw_message_id: message.id,
+                metadata: metadata
+              });
+
+              // Trigger AI response (if applicable, e.g. text/media)
+              const beatriceReply = await generateBeatriceReply({
+                userId: userData.firebase_uid, 
+                message: messageText,
+                channel: 'whatsapp_meta_webhook',
+                from: from,
+              });
+
+              if (beatriceReply) {
+                 const eburonAccessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+                 if (eburonAccessToken && phoneNumberId) {
+                   const replyRes = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+                      method: 'POST',
+                      headers: {
+                        Authorization: `Bearer ${eburonAccessToken}`,
+                        'Content-Type': 'application/json',
                       },
-                    }),
-                  });
-               }
+                      body: JSON.stringify({
+                        messaging_product: 'whatsapp',
+                        recipient_type: 'individual',
+                        to: from,
+                        type: 'text',
+                        text: { preview_url: true, body: beatriceReply },
+                      }),
+                    });
+
+                    const replyData: any = await replyRes.json();
+                    await supabase.from('whatsapp_messages').insert({
+                      user_id: userData.id,
+                      firebase_uid: userData.firebase_uid,
+                      phone: from,
+                      text: beatriceReply,
+                      direction: 'sent',
+                      status: replyRes.ok ? 'sent' : 'failed',
+                      provider: 'meta_cloud_api',
+                      raw_message_id: replyData.messages?.[0]?.id || null
+                    });
+                 }
+              }
             }
           }
         }
-      } catch (err) {
-        console.error("Meta Webhook parsing error", err);
       }
-      res.status(200).send('EVENT_RECEIVED');
-    } else {
-      res.sendStatus(404);
+    } catch (err) {
+      console.error("Meta Webhook processing error:", err);
+    }
+  });
+
+  app.post('/api/whatsapp/send-template', authenticateToken, async (req: any, res) => {
+    try {
+      const userId = req.user.uid;
+      const { to, templateName, languageCode, parameters } = req.body;
+
+      const eburonAccessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+      const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+      if (!eburonAccessToken || !phoneNumberId) {
+         throw new Error("Meta Cloud API credentials missing.");
+      }
+
+      const components = parameters ? [{
+         type: "body",
+         parameters: parameters.map((p: any) => ({ type: "text", text: p }))
+      }] : [];
+
+      const response = await fetch(
+        `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${eburonAccessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: to,
+            type: 'template',
+            template: {
+               name: templateName,
+               language: { code: languageCode || 'en_US' },
+               components: components
+            }
+          }),
+        }
+      );
+
+      const result = await response.json();
+      
+      // Log to Supabase
+      const supabase = getSupabase();
+      const { data: userData } = await supabase.from('users').select('id').eq('firebase_uid', userId).single();
+      if (userData) {
+         await supabase.from('whatsapp_messages').insert({
+            user_id: userData.id,
+            firebase_uid: userId,
+            phone: to,
+            text: `[Template: ${templateName}]`,
+            direction: 'sent',
+            status: response.ok ? 'sent' : 'failed',
+            provider: 'meta_cloud_api',
+            raw_message_id: result.messages?.[0]?.id || null
+         });
+      }
+
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
@@ -861,8 +1178,10 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', async () => {
     console.log(`Eburon AI Server running on http://localhost:${PORT}`);
+    // Recover existing sessions
+    await recoverSessions();
   });
 }
 

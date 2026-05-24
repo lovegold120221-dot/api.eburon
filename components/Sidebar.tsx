@@ -9,8 +9,7 @@ import { useLiveAPIContext } from '@/contexts/LiveAPIContext';
 import { useState } from 'react';
 import ToolEditorModal from './ToolEditorModal';
 import { LANGUAGES } from '@/lib/languages';
-import { auth, db, handleFirestoreError, OperationType } from '@/lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { auth } from '@/lib/firebase';
 import { X, Check, Sliders, Volume2, Globe, FileText, User, Cpu, Sparkles, CheckSquare, Square, Plus, Trash2, Edit2 } from 'lucide-react';
 
 const AVAILABLE_MODELS = [
@@ -51,21 +50,28 @@ export default function Sidebar() {
     const user = auth.currentUser;
     if (user) {
       try {
-        const userRef = doc(db, 'users', user.uid);
-        await setDoc(userRef, {
-          settings: {
-            personaName,
-            userCallName,
-            systemPrompt,
-            voice,
-            language,
-            model
-          }
-        }, { merge: true });
+        const token = await user.getIdToken();
+        const res = await fetch('/api/settings', {
+           method: 'PUT',
+           headers: { 
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+           },
+           body: JSON.stringify({
+              persona_name: personaName,
+              user_call_name: userCallName,
+              system_prompt: systemPrompt,
+              voice,
+              language,
+              model,
+              tools: tools
+           })
+        });
+        if (!res.ok) throw new Error('Failed to save');
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2500);
       } catch (e) {
-        handleFirestoreError(e, OperationType.WRITE, `users/${user.uid}`);
+        console.error('Failed to save settings:', e);
         setSaveStatus('error');
         setTimeout(() => setSaveStatus('idle'), 3000);
       }

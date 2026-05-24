@@ -61,6 +61,35 @@ export const whatsappTools: FunctionCall[] = [
     },
     isEnabled: true,
     scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'send_whatsapp_template',
+    description: 'Sends an official WhatsApp template message to a specific phone number using Eburon\'s Meta for Developers WhatsApp Cloud API. Templates must be pre-approved in the Meta dashboard.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        to: {
+          type: 'STRING',
+          description: 'The phone number of the recipient in international format (e.g., "15550199999").',
+        },
+        templateName: {
+          type: 'STRING',
+          description: 'The name of the pre-approved template (e.g., "hello_world").',
+        },
+        languageCode: {
+          type: 'STRING',
+          description: 'The language code for the template (default: "en_US").',
+        },
+        parameters: {
+          type: 'ARRAY',
+          items: { type: 'STRING' },
+          description: 'The values for the template placeholders ({{1}}, {{2}}, etc.).',
+        },
+      },
+      required: ['to', 'templateName'],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
   }
 ];
 
