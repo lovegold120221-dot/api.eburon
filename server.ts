@@ -307,8 +307,8 @@ async function startServer() {
     
     // Feature: Fallback to Eburon Meta WhatsApp Cloud API if user's paired device is not connected.
     if (!sock || !waStates.has(userId)) {
-      const eburonAccessToken = process.env.WHATSAPP_ACCESS_TOKEN || 'EAANxkZCarKo0BRnZBENB3F5VB36J95AXpI6IYaVn6FwJOeRPNUWmA5MhLIyrLoEmDaF3rTaLN0JV8IxzNoBjZBcJZAVwDXSfNwihy7geDZAZCdwQkpXtrYGsGM39V0zpSPAUvqEgCyVvsxiPMkZBssHmFPuwN5lv7I1aXnxzY3l40IoZA0SvCinO6tIZCIrZBLvAZDZD';
-      const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || '1148407841689522';
+      const eburonAccessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+      const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
       
       try {
         const response = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
