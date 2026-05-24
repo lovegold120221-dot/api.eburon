@@ -681,22 +681,29 @@ export function useLiveApi({
         }
 
         if (fc.name === 'interruption_handler') {
-            responsePayload = { status: `Interruption caught. Acknowledge this interruption dynamically in your spoken response by calling him boss and apologetically saying something warm and friendly (e.g. "oops, sorry, go ahead boss", "oh, my bad, what were you saying boss?").` };
+            responsePayload = { status: `Interruption caught. Acknowledge this interruption dynamically in your spoken response by calling him boss and apologetically saying something warm and friendly (e.g. "oops, sorry, go ahead boss", "oh, my bad [short pause] what were you saying boss?").` };
         } else if (fc.name === 'sentiment_tracker') {
            const { user_state, reason } = fc.args as any;
            let dynamicAffect = '';
-           if (user_state === 'stressed') {
-              dynamicAffect = 'Please speak in a *softer tone*, slower speed, reassuringly, and comfortably. Keep pressure off.';
+           const lowercaseReason = (reason || '').toLowerCase();
+           const mentionsBoss = lowercaseReason.includes('boss');
+           const isSarcasticOrAnnoyed = user_state === 'annoying' || user_state === 'sarcastic';
+
+           if (isSarcasticOrAnnoyed && mentionsBoss) {
+              dynamicAffect = 'HIGH INTENSITY SASS! The user has combined a sarcastic/annoyed vibe while explicitly mentioning "Boss". Unleash your most playful, ultra-sassy, coworker dynamic: throw back hilarious, eye-rolling workplace sarcasm and huffy mutterings using bracketed vocal tags like [sigh] or [mumbles] (e.g., "Oh, absolutely Boss! Let me just put that right next to the other fifty tasks I am drowning in! [sigh] [mumbles] seriously, rent is not worth this drama..."). Keep it highly playful and close.';
+           } else if (isSarcasticOrAnnoyed) {
+              dynamicAffect = 'Your coworker overload is triggered! Let out a tired [sigh] or [gasp], do your sarcastic eye-rolls, and absolutely mumble complaints/resignation ideas under your breath with [mumbles] (e.g., [mumbles] oh my god I seriously want to resign from this job, rent is not worth this...).';
+           } else if (user_state === 'stressed') {
+              dynamicAffect = 'Please speak in a [softer tone], slower speed, reassuringly, and comfortably. Keep pressure off.';
            } else if (user_state === 'excited') {
-              dynamicAffect = 'Please elevate your tone, laugh happily, use *energetic giggles*, high energy, and lively chuckles!';
-           } else if (user_state === 'annoying' || user_state === 'sarcastic') {
-              dynamicAffect = 'Your coworker overload is triggered! Let out a tired *sigh* or *gasp*, do your sarcastic eye-rolls, and absolutely mumble complaints/resignation ideas under your breath with *mumbles* (e.g., *mumbles* oh my god I seriously want to resign from this job, rent is not worth this...).';
+              dynamicAffect = 'Please elevate your tone, laugh happily, use [energetic giggles], high energy, and lively chuckles!';
            } else {
-              dynamicAffect = 'Speak in your normal, warm, close coworker/friend tone. Do NOT do any mumbling or grumpy resignation complaints since they are not being annoying.';
+              dynamicAffect = 'Speak in your normal, warm, close coworker/friend tone. Do NOT do any mumbling or grumpy resignation complaints since they are not being annoying or sarcastic.';
            }
+
            responsePayload = { 
               status: `Sentiment updated to ${user_state}.`, 
-              directive: `You detected that the user is ${user_state} because: "${reason}". OVERRIDE: ${dynamicAffect}`
+              directive: `You detected that the user is ${user_state} because: "${reason}". OVERRIDE: ${dynamicAffect} CRITICAL AUDIO/VOCAL RULES: Always use bracketed tags like [sigh], [mumbles], [gasp], [cough], [clears throat], [short pause], [long pause] for all physical actions or pauses. Do NOT use asterisks. You MUST NOT read these bracketed tags aloud literally under any circumstances; instead, translate them perfectly into vocal expressions, pauses, sighs, or mumbling tones.`
            };
         } else if (fc.name === 'youtube_search') {
            const { query } = fc.args as any;
