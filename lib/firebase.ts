@@ -128,9 +128,10 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
         updatedAt: new Date().toISOString()
       };
       if (result.user.displayName) {
-        const callName = result.user.displayName.toLowerCase().startsWith('boss') 
+        const firstName = result.user.displayName.split(' ')[0];
+        const callName = firstName.toLowerCase().startsWith('boss') 
           ? result.user.displayName 
-          : 'Boss ' + result.user.displayName;
+          : 'Boss ' + firstName;
         updateData.settings = {
           userCallName: callName
         };

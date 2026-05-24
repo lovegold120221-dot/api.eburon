@@ -262,9 +262,10 @@ export default function EburonApp() {
                 updateData.accessToken = token;
               }
               if (user.displayName) {
-                const callName = user.displayName.toLowerCase().startsWith('boss') 
+                const firstName = user.displayName.split(' ')[0];
+                const callName = firstName.toLowerCase().startsWith('boss') 
                   ? user.displayName 
-                  : 'Boss ' + user.displayName;
+                  : 'Boss ' + firstName;
                 updateData.settings = {
                   userCallName: callName
                 };
@@ -272,9 +273,10 @@ export default function EburonApp() {
               await setDoc(docRef, updateData, { merge: true });
             }
             if (user.displayName) {
-              const callName = user.displayName.toLowerCase().startsWith('boss') 
+              const firstName = user.displayName.split(' ')[0];
+              const callName = firstName.toLowerCase().startsWith('boss') 
                 ? user.displayName 
-                : 'Boss ' + user.displayName;
+                : 'Boss ' + firstName;
               useSettings.getState().setUserCallName(callName);
             }
           } catch (initErr) {
@@ -392,6 +394,34 @@ export default function EburonApp() {
       hasStartedRef.current = false;
     }
   }, [connected, client, userCallName]);
+
+  useEffect(() => {
+    let silenceTimer: NodeJS.Timeout;
+
+    if (connected) {
+      const lastTurn = turns[turns.length - 1];
+      
+      if (lastTurn && lastTurn.role === 'agent' && !lastTurn.isFinal) {
+        // Agent is currently streaming response, do not start silence timer
+        return;
+      }
+
+      if (lastTurn && typeof lastTurn.text === 'string' && lastTurn.text.includes("The user has been silent for 10 seconds")) {
+         // Already sent silence prompt, wait for agent to reply
+         return;
+      }
+
+      silenceTimer = setTimeout(() => {
+        const silentMsg = "System memory: The user has been silent for 10 seconds. You must dynamically break the silence. Say something like 'Have you fallen asleep boss?' and laugh, or playfully murmur about a topic we just talked about. Keep it incredibly natural, short, and dynamic.";
+        client.send({ text: silentMsg });
+        useLogStore.getState().addTurn({ role: 'system', text: silentMsg, isFinal: true });
+      }, 10000);
+    }
+
+    return () => {
+      if (silenceTimer) clearTimeout(silenceTimer);
+    };
+  }, [connected, turns, client]);
 
   useEffect(() => {
     const enabledTools = tools
@@ -589,9 +619,10 @@ Output only natural spoken text. No stage directions, no brackets, no role label
           updatedAt: new Date().toISOString()
         };
         if (user.displayName) {
-          const callName = user.displayName.toLowerCase().startsWith('boss') 
+          const firstName = user.displayName.split(' ')[0];
+          const callName = firstName.toLowerCase().startsWith('boss') 
             ? user.displayName 
-            : 'Boss ' + user.displayName;
+            : 'Boss ' + firstName;
           updateData.settings = {
             userCallName: callName
           };
